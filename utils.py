@@ -1,11 +1,17 @@
-from PyPDF2 import PdfReader
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from tqdm import tqdm
+from PyPDF2 import PdfReader
+
+from tokenizers_ import CharacterTokenizer
+from models import SimpleModel
+
 import torch
+from torch.nn import functional as F
 
 
-def get_pdf_text(pdf_docs: list()):
+def get_pdf_text(pdf_docs: list):
     text = ""
     for pdf in pdf_docs:
         pdf_reader = PdfReader(pdf)
@@ -16,7 +22,7 @@ def get_pdf_text(pdf_docs: list()):
 
 def get_batches(
     tok_text: torch.Tensor,
-    config: dict(),
+    config: dict,
     split: str = "train",
 ):
     context_window = config["context_window"]
@@ -35,8 +41,8 @@ def get_batches(
         0, batch_data.size(0) - context_window - 1, (config["batch_size"],)
     )
 
-    x = torch.stack([batch_data[i : i + context_window - 1] for i in ix])
-    y = torch.stack([batch_data[i + 1 : i + context_window] for i in ix])
+    x = torch.stack([batch_data[i : i + context_window] for i in ix])
+    y = torch.stack([batch_data[i + 1 : i + context_window + 1] for i in ix])
 
     return x, y
 
@@ -63,7 +69,7 @@ def train(model, tok_text, config, optimizer, scheduler=None, print_logs=True):
     losses = []
     x, y = get_batches(tok_text, config, split="train")
 
-    for epoch in range(config["epochs"]):
+    for epoch in tqdm(range(config["epochs"])):
         optimizer.zero_grad()
         logits, loss = model(x, y)
         loss.backward()
@@ -85,3 +91,25 @@ def train(model, tok_text, config, optimizer, scheduler=None, print_logs=True):
     print(f'val loss: {losses[-1]["val"]}')
     pd.DataFrame(losses).plot()
     plt.show()
+
+
+def simple_makemore(
+    untok_input: str, tokenizer: CharacterTokenizer, model: SimpleModel, config: dict
+):
+    tok_input = torch.tensor(tokenizer.tokenize(untok_input), dtype=torch.long)
+
+    # generate more text
+    # simple_model = SimpleModel(config)
+
+    # number of tokens to generate
+    num_tokens = 50
+
+    tok_output = torch.Tensor([])
+    for token in tqdm(range(num_tokens)):
+        logits = model(tok_input[-1])
+        probs = F.softmax(logits)
+        next_tok = torch.multinomial(probs, num_samples=1)
+        tok_output = torch.cat((tok_output, next_tok), dim=0)
+
+    output_text = tokenizer.untokenize(tok_output)
+    return output_text

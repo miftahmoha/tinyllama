@@ -1,7 +1,7 @@
 import torch
 
 
-class tokenizer:
+class CharacterTokenizer:
     def __init__(self, corpus):
         self.vocab = sorted(list(set(corpus)))
         self.tok = {char: tok for tok, char in enumerate(self.vocab)}

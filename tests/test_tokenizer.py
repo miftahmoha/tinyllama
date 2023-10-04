@@ -1,9 +1,9 @@
 import numpy as np
 import torch
-from tokenizer import tokenizer
+from tokenizers_ import CharacterTokenizer
 
 string = "I love tennis!"
-tokenizer = tokenizer(string)
+tokenizer = CharacterTokenizer(string)
 tok_string = torch.tensor(tokenizer.tokenize(string), dtype=torch.int8)
 untok_string = tokenizer.untokenize(tok_string)
 
