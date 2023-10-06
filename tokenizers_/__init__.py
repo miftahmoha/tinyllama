@@ -1,3 +1,3 @@
-__all__ = ["char_tokenizer"]
+__all__ = ["tokenizer"]
 
-from .char_tokenizer import CharacterTokenizer
+from .tokenizer import CharacterTokenizer

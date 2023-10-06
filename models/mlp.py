@@ -8,7 +8,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from normalization import RMSnorm
-from pos_encoding import get_rotary_matrix
+from encoding import get_rotary_matrix
 
 # Set the seed for PyTorch
 torch.manual_seed(42)

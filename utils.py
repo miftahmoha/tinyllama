@@ -10,6 +10,9 @@ from models import SimpleModel
 import torch
 from torch.nn import functional as F
 
+# set device to gpu
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 def get_pdf_text(pdf_docs: list):
     text = ""
@@ -58,7 +61,7 @@ def evaluate_loss(model, tok_text, config):
             losses = []
             x, y = get_batches(tok_text, config, split)
             _, loss = model(x, y)
-            losses += [loss]
+            losses += [loss.cpu()]
         out[split] = np.mean(losses)
 
     model.train()
@@ -78,7 +81,7 @@ def train(model, tok_text, config, optimizer, scheduler=None, print_logs=True):
         if scheduler:
             scheduler.step()
 
-        if epoch % config["log_interval"]:
+        if epoch % config["log_interval"] == 0:
             out = evaluate_loss(model, tok_text, config)
             losses += [out]
             if print_logs:
@@ -87,7 +90,7 @@ def train(model, tok_text, config, optimizer, scheduler=None, print_logs=True):
                 )
 
             if scheduler:
-                print(f"lr: {scheduler.lr}")
+                print(f"lr: {scheduler.get_lr()[0]}")
     print(f'val loss: {losses[-1]["val"]}')
     pd.DataFrame(losses).plot()
     plt.show()
@@ -96,20 +99,23 @@ def train(model, tok_text, config, optimizer, scheduler=None, print_logs=True):
 def simple_makemore(
     untok_input: str, tokenizer: CharacterTokenizer, model: SimpleModel, config: dict
 ):
-    tok_input = torch.tensor(tokenizer.tokenize(untok_input), dtype=torch.long)
-
-    # generate more text
-    # simple_model = SimpleModel(config)
+    tok_input = (
+        torch.tensor(tokenizer.tokenize(untok_input), dtype=torch.long)
+        .view((1, -1))
+        .to(device)
+    )
 
     # number of tokens to generate
     num_tokens = 50
 
-    tok_output = torch.Tensor([])
+    tok_output = torch.Tensor([]).to(device)
     for token in tqdm(range(num_tokens)):
-        logits = model(tok_input[-1])
-        probs = F.softmax(logits)
+        logits = model(tok_input)
+        probs = F.softmax(logits[:, -1, :], dim=-1)
+
         next_tok = torch.multinomial(probs, num_samples=1)
         tok_output = torch.cat((tok_output, next_tok), dim=0)
+        tok_input = torch.cat((tok_input, next_tok), dim=1)
 
-    output_text = tokenizer.untokenize(tok_output)
+    output_text = tokenizer.untokenize(tok_output.view(-1))
     return output_text
