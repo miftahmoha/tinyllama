@@ -2,4 +2,9 @@ main.py
 main.ipynb
 __pycache__/
 .pytest_cache/
-lyrics/
+lyrics
+./models/mlp
+./lyrics
+Dockerfile
+deploy.py
+requirements_deploy.txt

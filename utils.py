@@ -1,20 +1,21 @@
+from typing import List, Dict
+from tqdm import tqdm
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 from PyPDF2 import PdfReader
-
 from tokenizers_ import CharacterTokenizer
-from models import SimpleModel
 
 import torch
 from torch.nn import functional as F
+from torch import Tensor
 
 # set device to gpu
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def get_pdf_text(pdf_docs: list):
+def get_pdf_text(pdf_docs: List[PdfReader]):
     text = ""
     for pdf in pdf_docs:
         pdf_reader = PdfReader(pdf)
@@ -24,8 +25,8 @@ def get_pdf_text(pdf_docs: list):
 
 
 def get_batches(
-    tok_text: torch.Tensor,
-    config: dict,
+    tok_text: Tensor,
+    config: Dict,
     split: str = "train",
 ):
     context_window = config["context_window"]
@@ -51,7 +52,7 @@ def get_batches(
 
 
 @torch.no_grad()
-def evaluate_loss(model, tok_text, config):
+def evaluate_loss(model, tok_text: Tensor, config: Dict):
     out = {}
     model.eval()
 
@@ -68,7 +69,14 @@ def evaluate_loss(model, tok_text, config):
     return out
 
 
-def train(model, tok_text, config, optimizer, scheduler=None, print_logs=True):
+def train(
+    model,
+    tok_text: str,
+    config: Dict,
+    optimizer,
+    scheduler: bool = None,
+    print_logs: bool = True,
+):
     losses = []
     x, y = get_batches(tok_text, config, split="train")
 
@@ -97,7 +105,7 @@ def train(model, tok_text, config, optimizer, scheduler=None, print_logs=True):
 
 
 def simple_makemore(
-    untok_input: str, tokenizer: CharacterTokenizer, model: SimpleModel, config: dict
+    untok_input: str, tokenizer: CharacterTokenizer, model, config: Dict
 ):
     tok_input = (
         torch.tensor(tokenizer.tokenize(untok_input), dtype=torch.long)

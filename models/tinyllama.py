@@ -8,6 +8,7 @@ import numpy as np
 
 from normalization import RMSnorm
 from encoding import get_rotary_matrix
+from activations import SwiGLU
 
 
 class roPEAttentionHead(nn.Module):
@@ -73,7 +74,7 @@ class roPEMultiAttentionHead(nn.Module):
         return x
 
 
-class Transformer(nn.Module):
+class RoPEModel(nn.Module):
     def __init__(
         self,
         config: Dict[str, int],
@@ -107,9 +108,9 @@ class Transformer(nn.Module):
         x = self.rms(x)  # (B, C, emb_dim)
         x = x + self.linear(x)  # (B, C, emb_dim)
 
-        x = self.last_linear(x)  # (B, C, vocab_size)
+        logits = self.last_linear(x)  # (B, C, vocab_size)
 
-        logits = F.softmax(x, dim=-1)  # (B, C, vocab_size)
+        # logits = F.softmax(x, dim=-1)  # (B, C, vocab_size)
 
         if targets is not None:
             loss = F.cross_entropy(
@@ -118,3 +119,78 @@ class Transformer(nn.Module):
             return logits, loss
 
         return logits
+
+
+class LlamaBlock(nn.Module):
+    def __init__(
+        self,
+        config,
+        attn_head,
+        mult_attn_head,
+    ):
+        super().__init__()
+        self.config = config
+        self.rms = RMSnorm((config["context_window"], config["emb_dim"]))
+        self.multi_attn_head = roPEMultiAttentionHead(
+            self.config, attn_head(self.config)
+        )
+
+        self.linear = nn.Sequential(
+            nn.Linear(config["emb_dim"], config["emb_dim"]),
+            SwiGLU(config["emb_dim"]),
+        )
+
+        self.last_linear = nn.Linear(config["emb_dim"], config["vocab_size"])
+
+        print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
+
+    def forward(self, x, targets=None):
+        x = self.rms(x)  # (B, C, emb_dim)
+        x = x + self.multi_attn_head(x)  # (B, C, emb_dim)
+
+        x = self.rms(x)  # (B, C, emb_dim)
+        x = x + self.linear(x)  # (B, C, emb_dim)
+
+        return x
+
+
+class Llama(nn.Module):
+    def __init__(
+        self,
+        config: Dict,
+        llama_block: LlamaBlock,
+        attn_head: roPEAttentionHead,
+        mult_attn_head: roPEMultiAttentionHead,
+    ):
+        super().__init__()
+        self.config = config
+        self.embedding = nn.Embedding(config["vocab_size"], config["emb_dim"])
+        self.llama_blocks = nn.ModuleList(
+            [
+                llama_block(config, attn_head, mult_attn_head)
+                for i in range(config["n_blocks"])
+            ]
+        )
+        self.linear = nn.Linear(
+            config["n_blocks"] * config["emb_dim"], config["emb_dim"]
+        )
+        self.last_linear = nn.Linear(config["emb_dim"], config["vocab_size"])
+
+    def forward(self, x: Tensor, targets: Tensor = None):
+        x = self.embedding(x)  # (B, C, emb_dim)
+
+        x = [
+            llama_block_(x) for llama_block_ in self.llama_blocks
+        ]  # (B, C, emb_dim, n_blocks)
+        x = torch.cat(x, dim=-1)  # (B, C, emb_dim*n_blocks)
+        x = self.linear(x)  # (B, C, emb_dim)
+        logits = self.last_linear(x)
+
+        if targets is None:
+            return logits
+
+        else:
+            loss = F.cross_entropy(
+                logits.view(-1, self.config["vocab_size"]), targets.view(-1)
+            )
+            return logits, loss
