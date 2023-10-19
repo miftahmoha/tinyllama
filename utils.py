@@ -74,8 +74,9 @@ def train(
     tok_text: str,
     config: Dict,
     optimizer,
-    scheduler: bool = None,
-    print_logs: bool = True,
+    scheduler: Optional[bool] = None,
+    return_logs: Optional[bool] = False,
+    return_plot: Optional[bool] = False,
 ):
     losses = []
     x, y = get_batches(tok_text, config, split="train")
@@ -92,16 +93,17 @@ def train(
         if epoch % config["log_interval"] == 0:
             out = evaluate_loss(model, tok_text, config)
             losses += [out]
-            if print_logs:
+            if return_logs:
                 print(
                     f'Epoch: {epoch} | training loss: {out["train"]} | validation loss: {out["val"]}'
                 )
+    # print(f'val loss: {losses[-1]["val"]}')
 
-            if scheduler:
-                print(f"lr: {scheduler.get_lr()[0]}")
-    print(f'val loss: {losses[-1]["val"]}')
-    pd.DataFrame(losses).plot()
-    plt.show()
+    if return_plot:
+        pd.DataFrame(losses).plot()
+        plt.show()
+    else:
+        return losses
 
 
 def simple_makemore(

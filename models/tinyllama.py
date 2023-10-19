@@ -1,4 +1,5 @@
 from typing import Dict
+from collections import OrderedDict
 
 import torch
 from torch import Tensor
@@ -99,7 +100,7 @@ class RoPEModel(nn.Module):
 
         print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
 
-    def forward(self, x: torch.Tensor, targets: torch.Tensor = None):
+    def forward(self, x: Tensor, targets: Tensor = None):
         x = self.embedding(x)  # (B, C, emb_dim)
 
         x = self.rms(x)  # (B, C, emb_dim)
@@ -142,8 +143,6 @@ class LlamaBlock(nn.Module):
 
         self.last_linear = nn.Linear(config["emb_dim"], config["vocab_size"])
 
-        print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
-
     def forward(self, x, targets=None):
         x = self.rms(x)  # (B, C, emb_dim)
         x = x + self.multi_attn_head(x)  # (B, C, emb_dim)
@@ -155,6 +154,51 @@ class LlamaBlock(nn.Module):
 
 
 class Llama(nn.Module):
+    def __init__(
+        self,
+        config: Dict,
+        llama_block: LlamaBlock,
+        attn_head: roPEAttentionHead,
+        mult_attn_head: roPEMultiAttentionHead,
+    ):
+        super().__init__()
+        self.config = config
+        self.embedding = nn.Embedding(config["vocab_size"], config["emb_dim"])
+        self.llama_block_seq = nn.Sequential(
+            OrderedDict(
+                [
+                    (f"llama_{i}", llama_block(config, attn_head, mult_attn_head))
+                    for i in range(config["n_blocks"])
+                ]
+            )
+        )
+        self.linear = nn.Sequential(
+            nn.Linear(config["emb_dim"], config["emb_dim"]),
+            SwiGLU(config["emb_dim"]),
+        )
+        self.last_linear = nn.Linear(config["emb_dim"], config["vocab_size"])
+        print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
+
+    def forward(self, x: Tensor, targets: Tensor = None):
+        x = self.embedding(x)  # (B, C, emb_dim)
+
+        x = self.llama_block_seq(x)  # (B, C, emb_dim)
+
+        x = self.linear(x)  # (B, C, emb_dim)
+
+        logits = self.last_linear(x)  # (B, C, vocab_size)
+
+        if targets is None:
+            return logits
+
+        else:
+            loss = F.cross_entropy(
+                logits.view(-1, self.config["vocab_size"]), targets.view(-1)
+            )
+            return logits, loss
+
+
+class Llama_(nn.Module):
     def __init__(
         self,
         config: Dict,
