@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Optional
 from tqdm import tqdm
 
 import pandas as pd
@@ -97,7 +97,7 @@ def train(
                 print(
                     f'Epoch: {epoch} | training loss: {out["train"]} | validation loss: {out["val"]}'
                 )
-    # print(f'val loss: {losses[-1]["val"]}')
+    # print(f'val loss: {losses[-5]["val"]}')
 
     if return_plot:
         pd.DataFrame(losses).plot()

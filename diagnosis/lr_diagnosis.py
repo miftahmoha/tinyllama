@@ -1,13 +1,12 @@
-from typing import List, Dict, Callable, Optional
-from copy import copy
+from typing import Dict, Callable, Optional
 
-import torch
 from torch import Tensor
 from torch.optim import Optimizer
 import matplotlib.pyplot as plt
 import numpy as np
 
 from models import Llama
+
 
 def lr_diagnosis_wrapper(
     train: Callable[
@@ -27,8 +26,8 @@ def lr_diagnosis_wrapper(
 
         # create the tensor
         lrs = 10 ** np.linspace(start, end, n_lrs)
-        
-        print(f'The number of epochs for each lr is set to {args[2]}')
+
+        print(f"The number of epochs for each lr is set to {args[2]}")
         args[2]["epochs"] = 5
 
         for lr in lrs:
