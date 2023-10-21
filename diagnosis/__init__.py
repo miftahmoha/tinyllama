@@ -1,1 +1,1 @@
-__all__ = ["lr_diagnosis"]
+__all__ = ["lrs_diagnosis", "activations_diagnosis", "gradients_diagnosis"]

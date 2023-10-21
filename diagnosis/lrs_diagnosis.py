@@ -8,7 +8,7 @@ import numpy as np
 from models import Llama
 
 
-def lr_diagnosis_wrapper(
+def lrs_diagnosis_wrapper(
     train: Callable[
         [Llama, str, Dict, Optimizer, Optional[bool], Optional[bool]], Tensor
     ],
@@ -19,16 +19,17 @@ def lr_diagnosis_wrapper(
         **kwargs,
     ):
         losses = []
+        legends = []
 
         # specify the range and the number of values
         start = -5
-        end = 3
+        end = 0
 
         # create the tensor
         lrs = 10 ** np.linspace(start, end, n_lrs)
 
-        print(f"The number of epochs for each lr is set to {args[2]}")
         args[2]["epochs"] = 5
+        print(f'The number of epochs for each lr is set to {args[2]["epochs"]}')
 
         for lr in lrs:
             for param_group in args[3].param_groups:
@@ -41,11 +42,14 @@ def lr_diagnosis_wrapper(
 
         # plot loss_train and loss_val on the same plot
         plt.plot(np.linspace(start, end, n_lrs), loss_train)
+        legends.append("Training batches")
         plt.plot(np.linspace(start, end, n_lrs), loss_val)
+        legends.append("Test batches")
 
         # add labels and a legend
         plt.xlabel("x")
         plt.ylabel("Loss")
+        plt.ylim(0, 5)
         plt.show()
 
     return wrapper

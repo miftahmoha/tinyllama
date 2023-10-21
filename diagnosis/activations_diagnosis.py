@@ -25,18 +25,24 @@ def activations_diagnosis_wrapper(
     ]
 ):
     def wrapper(*args, **kwargs):
+        legends = []
+
         # hooking an activation layers
         hook_activ_swiglu_0 = (
             args[0]
             .llama_block_seq.llama_0.linear[1]
             .register_forward_hook(getActivation("SwiGLU activations 0"))
         )
-        hook_activ_swiglu_0 = (
+        hook_activ_swiglu_1 = (
             args[0]
             .llama_block_seq.llama_1.linear[1]
             .register_forward_hook(getActivation("SwiGLU activations 1"))
         )
-        (args[0].linear[1].register_forward_hook(getActivation("SwiGLU activations 2")))
+        hook_activ_swiglu_2 = (
+            args[0]
+            .linear[1]
+            .register_forward_hook(getActivation("SwiGLU activations 2"))
+        )
 
         print(f"Hooking {args[0].linear[1]}..")
         train(*args, **kwargs)
@@ -49,10 +55,9 @@ def activations_diagnosis_wrapper(
                 activation["SwiGLU activations 0"][0, i, :].cpu(), density=True
             )
             plt.plot(hx[:-1].detach(), hy.detach())
+            legends.append("SwiGLU activations 0")
         hook_activ_swiglu_0.remove()
-        plt.title(
-            "Histogram 0 representing the activations each embedding (color) for the first batch"
-        )
+        plt.title("SwiGLU activations 0")
         plt.show()
 
         print("Histogram 1 for the first batch:")
@@ -61,10 +66,9 @@ def activations_diagnosis_wrapper(
                 activation["SwiGLU activations 1"][0, i, :].cpu(), density=True
             )
             plt.plot(hx[:-1].detach(), hy.detach())
-        hook_activ_swiglu_0.remove()
-        plt.title(
-            "Histogram 1 representing the activations each embedding (color) for the first batch"
-        )
+            legends.append("SwiGLU activations 1")
+        hook_activ_swiglu_1.remove()
+        plt.title("SwiGLU activations 1")
         plt.show()
 
         print("Histogram 2 for the first batch:")
@@ -73,10 +77,8 @@ def activations_diagnosis_wrapper(
                 activation["SwiGLU activations 2"][0, i, :].cpu(), density=True
             )
             plt.plot(hx[:-1].detach(), hy.detach())
-        hook_activ_swiglu_0.remove()
-        plt.title(
-            "Histogram 2 representing the activations each embedding (color) for the first batch"
-        )
+        hook_activ_swiglu_2.remove()
+        plt.title("SwiGLU activations 2")
         plt.show()
 
     return wrapper
