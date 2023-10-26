@@ -77,11 +77,12 @@ def train(
     scheduler: Optional[bool] = None,
     return_logs: Optional[bool] = False,
     return_plot: Optional[bool] = False,
+    show_progress: bool = True,
 ):
     losses = []
     x, y = get_batches(tok_text, config, split="train")
 
-    for epoch in tqdm(range(config["epochs"])):
+    for epoch in tqdm(range(config["epochs"]), disable=not show_progress):
         optimizer.zero_grad()
         logits, loss = model(x, y)
         loss.backward()
