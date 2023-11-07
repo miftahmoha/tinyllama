@@ -8,7 +8,7 @@ from PyPDF2 import PdfReader
 from tokenizers_ import CharacterTokenizer
 
 import torch
-from torch.nn import functional as F
+from torch import nn
 from torch import Tensor
 
 # set device to gpu
@@ -16,6 +16,13 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def get_pdf_text(pdf_docs: List[PdfReader]):
+    """
+    Reads a list of PDFs.
+
+    :param pdf_docs: List containing the PDFs
+    :type pdf_docs: List[PdfReader]
+    """
+
     text = ""
     for pdf in pdf_docs:
         pdf_reader = PdfReader(pdf)
@@ -25,15 +32,26 @@ def get_pdf_text(pdf_docs: List[PdfReader]):
 
 
 def get_batches(
-    tok_text: Tensor,
+    tokens: Tensor,
     config: Dict,
     split: str = "train",
 ):
+    """
+    Selects random batches and returns them.
+
+    :param tokens: Tokens (tokenized input corpus)
+    :type tokens: Tensor
+    :param config: Configuration file containing model hyperparameters
+    :type config: Dict
+    :param split: Train or test set to get batches from
+    :type split: str
+    """
+
     context_window = config["context_window"]
 
-    train = tok_text[: int(0.8 * len(tok_text))]
-    val = tok_text[int(0.8 * len(tok_text)) : int(0.9 * len(tok_text))]
-    test = tok_text[int(0.9 * len(tok_text)) :]
+    train = tokens[: int(0.8 * len(tokens))]
+    val = tokens[int(0.8 * len(tokens)) : int(0.9 * len(tokens))]
+    test = tokens[int(0.9 * len(tokens)) :]
 
     batch_data = train
     if split == "val":
@@ -52,7 +70,18 @@ def get_batches(
 
 
 @torch.no_grad()
-def evaluate_loss(model, tok_text: Tensor, config: Dict):
+def evaluate_loss(model: nn.Module, tokens: Tensor, config: Dict):
+    """
+    Return the loss for batches in the train and validation sets.
+
+    :param model: LLM model
+    :type model: nn.Module
+    :param tokens: Tokens (tokenized input corpus)
+    :type tokens: Tensor
+    :param config: Configuration file containing model hyperparameters
+    :type config: Dict
+    """
+
     out = {}
     model.eval()
 
@@ -60,7 +89,7 @@ def evaluate_loss(model, tok_text: Tensor, config: Dict):
     for split in ["train", "val"]:
         for i in range(10):
             losses = []
-            x, y = get_batches(tok_text, config, split)
+            x, y = get_batches(tokens, config, split)
             _, loss = model(x, y)
             losses += [loss.cpu()]
         out[split] = np.mean(losses)
@@ -71,7 +100,7 @@ def evaluate_loss(model, tok_text: Tensor, config: Dict):
 
 def train(
     model,
-    tok_text: str,
+    tokens: str,
     config: Dict,
     optimizer,
     scheduler: Optional[bool] = None,
@@ -79,8 +108,30 @@ def train(
     return_plot: Optional[bool] = False,
     show_progress: bool = True,
 ):
+    """
+    Trains the LLM model.
+
+
+    :param model: LLM model
+    :type model: nn.Module
+    :param tokens: Tokens (tokenized input corpus)
+    :type tokens: Tensor
+    :param config: Configuration file containing model hyperparameters
+    :type config: Dict
+    :param optimizer: Optimizer for LLM model
+    :type optimizer: torch.optim.Optimizer
+    :param scheduler: Scheduler for step size
+    :type scheduler: torch.optim.Scheduler
+    :param return_logs: Activates logs for training
+    :type return_logs: Boolean
+    :param return_plot: Returns loss plot
+    :type return_plot: Boolean
+    :param show_progress: Activates progress bar
+    :type show_progress: Boolean
+    """
+
     losses = []
-    x, y = get_batches(tok_text, config, split="train")
+    x, y = get_batches(tokens, config, split="train")
 
     for epoch in tqdm(range(config["epochs"]), disable=not show_progress):
         optimizer.zero_grad()
@@ -92,7 +143,7 @@ def train(
             scheduler.step()
 
         if epoch % config["log_interval"] == 0:
-            out = evaluate_loss(model, tok_text, config)
+            out = evaluate_loss(model, tokens, config)
             losses += [out]
             if return_logs:
                 print(
@@ -108,10 +159,23 @@ def train(
 
 
 def simple_makemore(
-    untok_input: str, tokenizer: CharacterTokenizer, model, config: Dict
+    corpus: str, tokenizer: CharacterTokenizer, model: nn.Module, config: Dict
 ):
+    """
+    Generates random samples from LLM model.
+
+    :param corpus: Corpus containg text
+    :type corpus: str
+    :param tokenizer: Tokenizer
+    :type tokenizer: CharacterTokenizer
+    :param model: LLM model
+    :type model: nn.Module
+    :param config: Configuration file
+    :type config: Dict
+    """
+
     tok_input = (
-        torch.tensor(tokenizer.tokenize(untok_input), dtype=torch.long)
+        torch.tensor(tokenizer.tokenize(corpus), dtype=torch.long)
         .view((1, -1))
         .to(device)
     )
@@ -122,7 +186,7 @@ def simple_makemore(
     tok_output = torch.Tensor([]).to(device)
     for token in tqdm(range(num_tokens)):
         logits = model(tok_input)
-        probs = F.softmax(logits[:, -1, :], dim=-1)
+        probs = nn.functional.softmax(logits[:, -1, :], dim=-1)
 
         next_tok = torch.multinomial(probs, num_samples=1)
         tok_output = torch.cat((tok_output, next_tok), dim=0)
