@@ -3,15 +3,18 @@ Hyperparameter tuner for tinyllama using Bayesian implementation of a noiseless 
 """
 from typing import Callable, Optional, Dict
 from collections import Counter
+from copy import deepcopy
 
 import numpy as np
 from scipy.stats import qmc
 import matplotlib.pyplot as plt
-from torch.optim import Optimizer
+import torch
 from torch import Tensor
+from torch import nn
 import stan
 
-from models import Llama
+from training import train
+from config import train_config, gptune_config
 
 # reads the STAN model
 with open("./gptuner/gptuner.stan", "r") as file:
@@ -49,6 +52,7 @@ def process_results(results, X_train, Y_train, X_test, N_val):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
+    # needs changes to be able to make smooth plots
     ax.plot_trisurf(X[:, 0], X[:, 1], Y_mean, color="grey")
     ax.plot_trisurf(X[:, 0], X[:, 1], Y_25qtl, color="green")
     ax.plot_trisurf(X[:, 0], X[:, 1], Y_75qtl, color="red")
@@ -63,13 +67,7 @@ def process_results(results, X_train, Y_train, X_test, N_val):
     plt.show()
 
 
-def gptune(
-    train: Callable,
-    model: Llama,
-    tokens: Dict,
-    optimizer: Optimizer,
-    MASTER_CONFIG: Dict,
-):
+def gptune(model: nn.Module, tokens: Tensor):
     """
     Performs hyperparameter tuning using Gaussian Processes
 
@@ -86,24 +84,35 @@ def gptune(
     :type MASTER_CONFIG: Dict
     """
 
-    # get latin hypercube distributed samples for hyperparameters
-    sampler = qmc.LatinHypercube(d=2)
-    sample = sampler.random(n=50)
+    model_clone = deepcopy(model)
 
-    l_bounds = [25, 2]
-    u_bounds = [35, 20]
+    N_train, M = gptune_config["num_training_samples"], len(
+        gptune_config["hyperparams_to_tune"]
+    )
+
+    # get latin hypercube distributed samples for hyperparameters
+    sampler = qmc.LatinHypercube(d=M)
+    sample = sampler.random(n=N_train)
+
+    l_bounds = gptune_config["min_values"]
+    u_bounds = gptune_config["max_values"]
     X_train = qmc.scale(sample, l_bounds, u_bounds)
 
     # training & retrieve validation error for each sampled hyperparameter
     Y_train = []
+    optimizer = torch.optim.Adam(model_clone.parameters())
     for hyperparam in X_train:
-        MASTER_CONFIG["epochs"] = int(hyperparam[0])
-        MASTER_CONFIG["emb_dim"] = hyperparam[1]
-        Y_train += [float(train(model, tokens, MASTER_CONFIG, optimizer)[-1]["val"])]
-    N_train, M = X_train.shape
+        for index, hyperparam_to_tune in enumerate(
+            gptune_config["hyperparams_to_tune"]
+        ):
+            train_config[hyperparam_to_tune] = round(hyperparam[index])
+        Y_train += [
+            float(train(model_clone, tokens, train_config, optimizer)[-1]["val"])
+        ]
+    # N_train, M = X_train.shape
 
     # generating test samples for hyperparameters (going with uniform but could be abstracted)
-    N_val = 50
+    N_val = gptune_config["num_evaluations"]
     X_test = np.random.uniform(low=l_bounds, high=u_bounds, size=(N_val, M))
 
     data = {
@@ -116,71 +125,6 @@ def gptune(
     }
     posterior = stan.build(gptuner_stan, data=data)
     fit_results = posterior.sample(num_chains=4, num_samples=100)
+    # needs further considerations, return min, plot if dim <= 3, else return min
     results = process_results(fit_results, X_train, Y_train, X_test, N_val)
     return results
-
-
-def gptune_wrapper(
-    train: Callable[
-        [Llama, Tensor, Dict, Optimizer, Optional[bool], Optional[bool]], Tensor
-    ],
-    N_train_samples=100,
-    N_test_samples=100,
-    tune_args: Dict = {"epochs": [25, 64], "emb_dim": [2, 20]},
-):
-    """
-    Performs hyperparameter tuning using Gaussian Processes
-
-    .. comment ::
-
-        We'll start by implementing a noiseless GP and only tune two parameters, we'll add more abstractions
-        to generalize over other hyperparameters and GPs such as Noisy GPs.
-
-    :param train: Training utility for Llama
-    :type train: Callable
-    """
-
-    def wrapper(*args, **kwargs):
-        # get latin hypercube distributed samples for hyperparameters
-        sampler = qmc.LatinHypercube(d=len(tune_args))
-        sample = sampler.random(n=N_train_samples)
-
-        # retrieving bounds
-        l_bounds = []
-        u_bounds = []
-        for value in tune_args.values():
-            l_bounds.append(value[0])
-            u_bounds.append(value[1])
-
-        X_train = qmc.scale(sample, l_bounds, u_bounds)
-
-        # raises error if number of tuned args is > 2
-        if len(tune_args.values()) > 2:
-            raise ValueError("tune_args length is > 2")
-
-        # training & retrieve validation error for each sampled hyperparameter
-        Y_train = []
-        for hyperparam in X_train:
-            for index, key in enumerate(tune_args.keys()):
-                args[2][key] = int(hyperparam[index])
-            Y_train += [float(train(*args, **kwargs)[-1]["val"])]
-        N_train, M = X_train.shape
-
-        # generating test samples for hyperparameters (going with uniform but could be abstracted)
-        N_val = N_test_samples
-        X_test = np.random.uniform(low=l_bounds, high=u_bounds, size=(N_val, M))
-
-        data = {
-            "N_train": N_train,
-            "N_val": N_val,
-            "M": M,
-            "X_train": X_train,
-            "X_test": X_test,
-            "Y_train": Y_train,
-        }
-        posterior = stan.build(gptuner_stan, data=data)
-        fit_results = posterior.sample(num_chains=4, num_samples=100)
-        results = process_results(fit_results, X_train, Y_train, X_test, N_val)
-        return results
-
-    return wrapper

@@ -1,11 +1,6 @@
-__all__ = [
-    "lrs_diagnosis",
-    "activations_diagnosis",
-    "gradients_diagnosis",
-    "gd_ratio_diagnosis",
-]
+__all__ = ["lr_diagnose", "swiglu_diagnose", "gradient_diagnose", "gdr_diagnose"]
 
-from .lrs_diagnosis import lrs_diagnosis_wrapper
-from .activations_diagnosis import activations_diagnosis_wrapper
-from .gradients_diagnosis import gradients_diagnosis_wrapper
-from .gd_ratio_diagnosis import gd_diagnosis_wrapper
+from .lr_diagnose import lr_diagnose
+from .swiglu_diagnose import swiglu_diagnose
+from .gradient_diagnose import gradient_diagnose
+from .gdratio_diagnose import gdratio_diagnose

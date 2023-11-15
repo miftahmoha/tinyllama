@@ -1,4 +1,4 @@
 __all__ = ["tokenizer"]
 
 
-from .tokenizer import CharacterTokenizer
+from .tokenizers import Tokenizer, CharacterTokenizer

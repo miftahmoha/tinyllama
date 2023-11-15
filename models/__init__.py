@@ -1,3 +1,3 @@
-__all__ = ["tinyllama"]
+__all__ = ["llama"]
 
-from .tinyllama import roPEAttentionHead, roPEMultiAttentionHead, LlamaBlock, Llama
+from .llama import Llama
