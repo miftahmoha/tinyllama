@@ -50,8 +50,10 @@
 	{
 		"hyperparams_to_tune": ["epochs", "emb_dim"],	
 		"num_training_samples": 50,
-		"min_values": [25,  2],
-		"max_values": [36, 20],
-		"num_evaluations": 50
+		"l_bounds": [25,  2],
+		"u_bounds": [36, 20],
+		"num_evaluations": 50,
+		"num_stan_samples": 500,
+		"num_stan_chains": 4
 	}
 }

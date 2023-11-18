@@ -67,7 +67,17 @@ def process_results(results, X_train, Y_train, X_test, N_val):
     plt.show()
 
 
-def gptune(model: nn.Module, tokens: Tensor):
+def gptune(
+    model: nn.Module,
+    tokens: Tensor,
+    num_training_samples: int = gptune_config["num_training_samples"],
+    l_bounds: list[int] = gptune_config["l_bounds"],
+    u_bounds: list[int] = gptune_config["u_bounds"],
+    hyperparams_to_tune: list[str] = gptune_config["hyperparams_to_tune"],
+    num_evaluations: int = gptune_config["num_evaluations"],
+    num_stan_samples: int = gptune_config["num_stan_samples"],
+    num_stan_chains: int = gptune_config["num_stan_chains"],
+):
     """
     Performs hyperparameter tuning using Gaussian Processes
 
@@ -86,25 +96,19 @@ def gptune(model: nn.Module, tokens: Tensor):
 
     model_clone = deepcopy(model)
 
-    N_train, M = gptune_config["num_training_samples"], len(
-        gptune_config["hyperparams_to_tune"]
-    )
+    N_train, M = num_training_samples, len(hyperparams_to_tune)
 
     # get latin hypercube distributed samples for hyperparameters
     sampler = qmc.LatinHypercube(d=M)
     sample = sampler.random(n=N_train)
 
-    l_bounds = gptune_config["min_values"]
-    u_bounds = gptune_config["max_values"]
     X_train = qmc.scale(sample, l_bounds, u_bounds)
 
     # training & retrieve validation error for each sampled hyperparameter
     Y_train = []
     optimizer = torch.optim.Adam(model_clone.parameters())
     for hyperparam in X_train:
-        for index, hyperparam_to_tune in enumerate(
-            gptune_config["hyperparams_to_tune"]
-        ):
+        for index, hyperparam_to_tune in enumerate(hyperparams_to_tune):
             train_config[hyperparam_to_tune] = round(hyperparam[index])
         Y_train += [
             float(train(model_clone, tokens, train_config, optimizer)[-1]["val"])
@@ -112,7 +116,7 @@ def gptune(model: nn.Module, tokens: Tensor):
     # N_train, M = X_train.shape
 
     # generating test samples for hyperparameters (going with uniform but could be abstracted)
-    N_val = gptune_config["num_evaluations"]
+    N_val = num_evaluations
     X_test = np.random.uniform(low=l_bounds, high=u_bounds, size=(N_val, M))
 
     data = {
@@ -124,7 +128,9 @@ def gptune(model: nn.Module, tokens: Tensor):
         "Y_train": Y_train,
     }
     posterior = stan.build(gptuner_stan, data=data)
-    fit_results = posterior.sample(num_chains=4, num_samples=100)
+    fit_results = posterior.sample(
+        num_chains=num_stan_chains, num_samples=num_stan_samples
+    )
     # needs further considerations, return min, plot if dim <= 3, else return min
     results = process_results(fit_results, X_train, Y_train, X_test, N_val)
     return results

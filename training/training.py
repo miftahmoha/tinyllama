@@ -8,12 +8,13 @@ import torch
 from torch import nn
 from torch import Tensor
 
-from config import model_config
+from config import train_config, model_config
 
 
 def get_batches(
     tokens: Tensor,
-    config: dict,
+    context_window: int,
+    batch_size: int,
     split: str = "train",
 ):
     """
@@ -39,9 +40,7 @@ def get_batches(
     if split == "test":
         batch_data = test
 
-    ix = torch.randint(
-        0, batch_data.size(0) - context_window - 1, (config["batch_size"],)
-    )
+    ix = torch.randint(0, batch_data.size(0) - context_window - 1, (batch_size,))
 
     x = torch.stack([batch_data[i : i + context_window] for i in ix])
     y = torch.stack([batch_data[i + 1 : i + context_window + 1] for i in ix])
@@ -50,7 +49,9 @@ def get_batches(
 
 
 @torch.no_grad()
-def evaluate_loss(model: nn.Module, tokens: Tensor, config: dict):
+def evaluate_loss(
+    model: nn.Module, tokens: Tensor, context_window: int, batch_size: int
+):
     """
     Return the loss for batches in the train and validation sets.
 
@@ -69,7 +70,7 @@ def evaluate_loss(model: nn.Module, tokens: Tensor, config: dict):
     for split in ["train", "val"]:
         for i in range(10):
             losses = []
-            x, y = get_batches(tokens, config, split)
+            x, y = get_batches(tokens, context_window, batch_size, split)
             _, loss = model(x, y)
             losses += [loss.cpu()]
         out[split] = np.mean(losses)
@@ -81,7 +82,10 @@ def evaluate_loss(model: nn.Module, tokens: Tensor, config: dict):
 def train(
     model: nn.Module,
     tokens: Tensor,
-    config: dict,
+    context_window: int,
+    batch_size: int,
+    epochs: int,
+    log_interval: int,
     optimizer: torch.optim.Optimizer,
     scheduler: Optional[bool] = None,
     return_logs: bool = False,
@@ -111,9 +115,10 @@ def train(
     """
 
     losses = []
-    x, y = get_batches(tokens, config, split="train")
+    # x, y = get_batches(tokens, config, split="train")
+    x, y = get_batches(tokens, context_window, batch_size, split="train")
 
-    for epoch in tqdm(range(config["epochs"]), disable=not show_progress):
+    for epoch in tqdm(range(epochs), disable=not show_progress):
         optimizer.zero_grad()
         logits, loss = model(x, y)
         loss.backward()
@@ -122,8 +127,8 @@ def train(
         if scheduler:
             scheduler.step()
 
-        if epoch % config["log_interval"] == 0:
-            out = evaluate_loss(model, tokens, config)
+        if epoch % log_interval == 0:
+            out = evaluate_loss(model, tokens, context_window, batch_size)
             losses += [out]
             if return_logs:
                 print(

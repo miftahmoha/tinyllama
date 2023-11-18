@@ -4,6 +4,7 @@ import itertools
 import json
 
 import torch
+from torch import nn
 from torch import Tensor
 import matplotlib.pyplot as plt
 
@@ -12,8 +13,9 @@ from config import train_config, gradient_config
 
 
 def gradient_diagnose(
-    model,
+    model: nn.Module,
     tokens: Tensor,
+    context_windows: int,
     num_params_to_track: int = gradient_config["num_params_to_track"],
 ):
     legends = []
@@ -21,7 +23,7 @@ def gradient_diagnose(
     model_clone = deepcopy(model)
 
     optimizer = torch.optim.Adam(model_clone.parameters())
-    train(model_clone, tokens, train_config, optimizer)
+    train(model_clone, tokens, context_windows, *train_config.values(), optimizer)
 
     for name, param in itertools.islice(
         model_clone.named_parameters(), num_params_to_track

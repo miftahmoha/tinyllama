@@ -9,13 +9,6 @@ import matplotlib.pyplot as plt
 from training import train
 from config import train_config, swiglu_config
 
-"""
-# reading config file for model
-json_file_path = "llama_config.json"
-with open(json_file_path, "r") as json_file:
-    train_config = json.load(json_file)["model"]
-"""
-
 # a dict to store the activations
 activation = {}
 
@@ -33,15 +26,16 @@ def getActivation(name):
 def swiglu_diagnose(
     model,
     tokens: Tensor,
+    context_window,
     num_embeddings_for_histogram: int = swiglu_config["num_embeddings_for_histogram"],
-    mode: str = swiglu_config["track_direction"],
+    track_direction: str = swiglu_config["track_direction"],
 ):
 
     model_clone = deepcopy(model)
     legends = []
 
     # hooking activations layers
-    if mode == "forward":
+    if track_direction == "forward":
         hook_activ_swiglu_0 = model_clone.llama_block_seq.llama_0.linear[
             1
         ].register_forward_hook(getActivation("SwiGLU activations 0"))
@@ -52,7 +46,7 @@ def swiglu_diagnose(
             getActivation("SwiGLU activations 2")
         )
 
-    elif mode == "backward":
+    elif track_direction == "backward":
         hook_activ_swiglu_0 = model_clone.llama_block_seq.llama_0.linear[
             1
         ].register_full_backward_hook(getActivation("SwiGLU activations 0"))
@@ -67,7 +61,7 @@ def swiglu_diagnose(
 
     # train the model
     optimizer = torch.optim.Adam(model_clone.parameters())
-    train(model_clone, tokens, train_config, optimizer)
+    train(model_clone, tokens, context_window, *train_config.values(), optimizer)
 
     # histograms
     for i in range(num_embeddings_for_histogram):

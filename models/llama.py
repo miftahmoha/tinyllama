@@ -14,24 +14,21 @@ from activations import SwiGLU
 from training import train
 from diagnosis import lr_diagnose, swiglu_diagnose, gradient_diagnose, gdratio_diagnose
 from gptuner import gptune
-from config import model_config
+from config import train_config, model_config
 
 
 class roPEAttentionHead(nn.Module):
-    def __init__(self):
+    def __init__(self, context_window: int, emb_dim: int):
         super().__init__()
-        self.embedding = nn.Embedding(
-            model_config["context_window"], model_config["emb_dim"]
-        )
-        self.rms = RMSnorm((model_config["context_window"], model_config["emb_dim"]))
+        self.emb_dim = emb_dim
+        self.embedding = nn.Embedding(context_window, emb_dim)
+        self.rms = RMSnorm((context_window, emb_dim))
 
-        self.w_q = nn.Linear(model_config["emb_dim"], model_config["emb_dim"])
-        self.w_k = nn.Linear(model_config["emb_dim"], model_config["emb_dim"])
-        self.w_v = nn.Linear(model_config["emb_dim"], model_config["emb_dim"])
+        self.w_q = nn.Linear(emb_dim, emb_dim)
+        self.w_k = nn.Linear(emb_dim, emb_dim)
+        self.w_v = nn.Linear(emb_dim, emb_dim)
 
-        self.R = get_rotary_matrix(
-            model_config["context_window"], model_config["emb_dim"]
-        )
+        self.R = get_rotary_matrix(context_window, emb_dim)
 
     def forward(self, x: Tensor, return_attn_weights: bool = False):
         # x = self.embedding(x)
@@ -51,7 +48,9 @@ class roPEAttentionHead(nn.Module):
         )
 
         if return_attn_weights:
-            attn_weights = torch.bmm(q_rot, k_rot.transpose(-2, -1)) / np.sqrt(emb_dim)
+            attn_weights = torch.bmm(q_rot, k_rot.transpose(-2, -1)) / np.sqrt(
+                self.emb_dim
+            )
             attn_weights = torch.softmax(attn_weights, dim=-1)
             return activations, attn_weights
 
@@ -59,13 +58,12 @@ class roPEAttentionHead(nn.Module):
 
 
 class roPEMultiAttentionHead(nn.Module):
-    def __init__(self):
+    def __init__(self, context_window: int, emb_dim: int, n_heads: int):
         super().__init__()
-        self.n_heads = model_config["n_heads"]
-        self.heads = nn.ModuleList([roPEAttentionHead() for i in range(self.n_heads)])
-        self.linear = nn.Linear(
-            model_config["emb_dim"] * model_config["n_heads"], model_config["emb_dim"]
+        self.heads = nn.ModuleList(
+            [roPEAttentionHead(context_window, emb_dim) for i in range(n_heads)]
         )
+        self.linear = nn.Linear(emb_dim * n_heads, emb_dim)
         self.dropout = nn.Dropout(0.2)
 
     def forward(self, x: Tensor):
@@ -79,17 +77,15 @@ class roPEMultiAttentionHead(nn.Module):
 
 
 class LlamaBlock(nn.Module):
-    def __init__(self):
+    def __init__(self, vocab_size: int, context_window: int, emb_dim, n_heads: int):
         super().__init__()
-        self.rms = RMSnorm((model_config["context_window"], model_config["emb_dim"]))
-        self.multi_attn_head = roPEMultiAttentionHead()
+        self.rms = RMSnorm((context_window, emb_dim))
+        self.multi_attn_head = roPEMultiAttentionHead(context_window, emb_dim, n_heads)
         self.linear = nn.Sequential(
-            nn.Linear(model_config["emb_dim"], model_config["emb_dim"]),
-            SwiGLU(model_config["emb_dim"]),
+            nn.Linear(emb_dim, emb_dim),
+            SwiGLU(emb_dim),
         )
-        self.last_linear = nn.Linear(
-            model_config["emb_dim"], model_config["vocab_size"]
-        )
+        self.last_linear = nn.Linear(emb_dim, vocab_size)
 
     def forward(self, x, targets=None):
         x = self.rms(x)  # (B, C, emb_dim)
@@ -102,25 +98,36 @@ class LlamaBlock(nn.Module):
 
 
 class Llama(nn.Module):
-    def __init__(self):
+    def __init__(
+        self,
+        vocab_size: int = model_config["vocab_size"],
+        context_window: int = model_config["context_window"],
+        emb_dim: int = model_config["emb_dim"],
+        n_heads: int = model_config["n_heads"],
+        n_blocks: int = model_config["n_blocks"],
+    ):
         super().__init__()
-        self.embedding = nn.Embedding(
-            model_config["vocab_size"], model_config["emb_dim"]
-        )
+        self.vocab_size = vocab_size
+        self.embedding = nn.Embedding(vocab_size, emb_dim)
         self.llama_block_seq = nn.Sequential(
             OrderedDict(
-                [(f"llama_{i}", LlamaBlock()) for i in range(model_config["n_blocks"])]
+                [
+                    (
+                        f"llama_{i}",
+                        LlamaBlock(vocab_size, context_window, emb_dim, n_heads),
+                    )
+                    for i in range(n_blocks)
+                ]
             )
         )
         self.linear = nn.Sequential(
-            nn.Linear(model_config["emb_dim"], model_config["emb_dim"]),
-            SwiGLU(model_config["emb_dim"]),
+            nn.Linear(emb_dim, emb_dim),
+            SwiGLU(emb_dim),
         )
-        self.last_linear = nn.Linear(
-            model_config["emb_dim"], model_config["vocab_size"]
-        )
+        self.last_linear = nn.Linear(emb_dim, vocab_size)
         print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
         self.tokens = None
+        self.context_window = context_window
 
     def forward(self, x: Tensor, targets: Tensor = None):
         x = self.embedding(x)  # (B, C, emb_dim)
@@ -135,38 +142,47 @@ class Llama(nn.Module):
             return logits
 
         else:
-            loss = F.cross_entropy(
-                logits.view(-1, model_config["vocab_size"]), targets.view(-1)
-            )
+            loss = F.cross_entropy(logits.view(-1, self.vocab_size), targets.view(-1))
             return logits, loss
 
     def setup_tokens(self, tokens: Tensor):
         self.tokens = tokens
 
-    def train_model(self, train_config: dict):
+    def train_model(
+        self,
+        batch_size: int = train_config["batch_size"],
+        epochs: int = train_config["epochs"],
+        log_interval: int = train_config["log_interval"],
+    ):
         if self.tokens is not None:
             optimizer = torch.optim.Adam(self.parameters())
-            train(self, self.tokens, train_config, optimizer)
+            train(
+                self,
+                self.tokens,
+                self.context_window,
+                batch_size,
+                epochs,
+                log_interval,
+                optimizer,
+            )
         else:
             raise ValueError(
                 f"You must initialize model {type(self)} with model.setup_tokens(tokens)."
             )
 
-    def diagnose_model(self, diagnosis_choice: str = "lr"):
+    def diagnose_model(self, diagnosis_choice: str = "lr", **kwargs):
         if self.tokens is not None:
             match diagnosis_choice:
                 case "lr":
-                    lr_diagnose(self, self.tokens)
-                case "forward_swiglu":
-                    swiglu_diagnose(self, self.tokens, mode="forward")
-                case "backward_swiglu":
-                    swiglu_diagnose(self, self.tokens, mode="backward")
+                    lr_diagnose(self, self.tokens, self.context_window, **kwargs)
+                case "swiglu":
+                    swiglu_diagnose(self, self.tokens, self.context_window, **kwargs)
                 case "gradients":
-                    gradient_diagnose(self, self.tokens)
+                    gradient_diagnose(self, self.tokens, self.context_window, **kwargs)
                 case "gdratio":
-                    gdratio_diagnose(self, self.tokens)
+                    gdratio_diagnose(self, self.tokens, self.context_window, **kwargs)
                 case "gptune":
-                    gptune(self, self.tokens)
+                    gptune(self, self.tokens, self.context_window, **kwargs)
                 case _:
                     raise ValueError("This is not a valid argument.")
         else:

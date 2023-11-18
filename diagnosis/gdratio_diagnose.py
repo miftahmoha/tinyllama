@@ -15,6 +15,7 @@ from config import train_config, gdratio_config
 def gdratio_diagnose(
     model,
     tokens: Tensor,
+    context_window: int,
     num_iters: int = gdratio_config["num_iters"],
     num_params_to_track: int = gdratio_config["num_params_to_track"],
 ):
@@ -28,7 +29,14 @@ def gdratio_diagnose(
     train_config.update({"epochs": 1})
 
     for _ in tqdm(range(num_iters)):
-        train(model_clone, tokens, train_config, optimizer, show_progress=False)
+        train(
+            model_clone,
+            tokens,
+            context_window,
+            *train_config.values(),
+            optimizer,
+            show_progress=False,
+        )
 
         for name, param in itertools.islice(
             model_clone.named_parameters(), num_params_to_track
