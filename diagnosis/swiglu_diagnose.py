@@ -1,13 +1,12 @@
-from typing import Dict, Optional, Callable
 from copy import deepcopy
-import json
 
 import torch
-from torch import Tensor
 import matplotlib.pyplot as plt
 
-from training import train
-from config import train_config, swiglu_config
+from diagnosis import Diagnose
+from training import TrainConfig, Trainer
+from models import Llama
+
 
 # a dict to store the activations
 activation = {}
@@ -23,72 +22,78 @@ def getActivation(name):
     return hook
 
 
-def swiglu_diagnose(
-    model,
-    tokens: Tensor,
-    context_window,
-    num_embeddings_for_histogram: int = swiglu_config["num_embeddings_for_histogram"],
-    track_direction: str = swiglu_config["track_direction"],
-):
+class SwigluDiagnose(Diagnose):
+    def __init__(self, *, num_embeddings_for_histogram: int, track_direction: str):
+        self.num_embeddings_for_histogram = num_embeddings_for_histogram
+        self.track_direction = track_direction
 
-    model_clone = deepcopy(model)
-    legends = []
+    def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
 
-    # hooking activations layers
-    if track_direction == "forward":
-        hook_activ_swiglu_0 = model_clone.llama_block_seq.llama_0.linear[
-            1
-        ].register_forward_hook(getActivation("SwiGLU activations 0"))
-        hook_activ_swiglu_1 = model_clone.llama_block_seq.llama_1.linear[
-            1
-        ].register_forward_hook(getActivation("SwiGLU activations 1"))
-        hook_activ_swiglu_2 = model_clone.linear[1].register_forward_hook(
-            getActivation("SwiGLU activations 2")
-        )
+        model_clone = deepcopy(model)
 
-    elif track_direction == "backward":
-        hook_activ_swiglu_0 = model_clone.llama_block_seq.llama_0.linear[
-            1
-        ].register_full_backward_hook(getActivation("SwiGLU activations 0"))
-        hook_activ_swiglu_1 = model_clone.llama_block_seq.llama_1.linear[
-            1
-        ].register_full_backward_hook(getActivation("SwiGLU activations 1"))
-        hook_activ_swiglu_2 = model_clone.linear[1].register_full_backward_hook(
-            getActivation("SwiGLU activations 2")
-        )
-    else:
-        raise ValueError("Parameter 'mode' can only be forward or backward!")
+        # hooking activations layers
+        if self.track_direction == "forward":
+            hook_activ_swiglu_0 = model_clone.llama_block_seq.llama_0.linear[
+                1
+            ].register_forward_hook(getActivation("SwiGLU activations 0"))
+            hook_activ_swiglu_1 = model_clone.llama_block_seq.llama_1.linear[
+                1
+            ].register_forward_hook(getActivation("SwiGLU activations 1"))
+            hook_activ_swiglu_2 = model_clone.linear[1].register_forward_hook(
+                getActivation("SwiGLU activations 2")
+            )
 
-    # train the model
-    optimizer = torch.optim.Adam(model_clone.parameters())
-    train(model_clone, tokens, context_window, *train_config.values(), optimizer)
+        else:
+            hook_activ_swiglu_0 = model_clone.llama_block_seq.llama_0.linear[
+                1
+            ].register_full_backward_hook(getActivation("SwiGLU activations 0"))
+            hook_activ_swiglu_1 = model_clone.llama_block_seq.llama_1.linear[
+                1
+            ].register_full_backward_hook(getActivation("SwiGLU activations 1"))
+            hook_activ_swiglu_2 = model_clone.linear[1].register_full_backward_hook(
+                getActivation("SwiGLU activations 2")
+            )
 
-    # histograms
-    for i in range(num_embeddings_for_histogram):
+        # train the model
+        Trainer_ = Trainer(TRAIN_CONFIG)
+        Trainer_.run(model_clone, tokens)
+
+        # sample random batches
+        random_batches = torch.randint(
+            low=0,
+            high=Trainer_.TRAIN_CONFIG["batch_size"] - 1,
+            size=(self.num_embeddings_for_histogram,),
+        ).tolist()
+
         hy, hx = torch.histogram(
-            activation["SwiGLU activations 0"][0, i, :].cpu(), density=True
+            activation["SwiGLU activations 0"][
+                random_batches, self.num_embeddings_for_histogram, :
+            ].cpu(),
+            density=True,
         )
         plt.plot(hx[:-1].detach(), hy.detach())
-        legends.append("SwiGLU activations 0")
-    hook_activ_swiglu_0.remove()
-    plt.title("Histogram for the 1st SwiGLU layer (first batch):")
-    plt.show()
+        hook_activ_swiglu_0.remove()
+        plt.title("Histogram for the 1st SwiGLU layer (random batches):")
+        plt.show()
 
-    for i in range(num_embeddings_for_histogram):
         hy, hx = torch.histogram(
-            activation["SwiGLU activations 1"][0, i, :].cpu(), density=True
+            activation["SwiGLU activations 1"][
+                random_batches, self.num_embeddings_for_histogram, :
+            ].cpu(),
+            density=True,
         )
         plt.plot(hx[:-1].detach(), hy.detach())
-        legends.append("SwiGLU activations 1")
-    hook_activ_swiglu_1.remove()
-    plt.title("Histogram for the 2nd SwiGLU layer (first batch)")
-    plt.show()
+        hook_activ_swiglu_1.remove()
+        plt.title("Histogram for the 2nd SwiGLU layer (random batches):")
+        plt.show()
 
-    for i in range(num_embeddings_for_histogram):
         hy, hx = torch.histogram(
-            activation["SwiGLU activations 2"][0, i, :].cpu(), density=True
+            activation["SwiGLU activations 2"][
+                random_batches, self.num_embeddings_for_histogram, :
+            ].cpu(),
+            density=True,
         )
         plt.plot(hx[:-1].detach(), hy.detach())
-    hook_activ_swiglu_2.remove()
-    plt.title("Histogram for the 3rd SwiGLU layer (first batch):")
-    plt.show()
+        hook_activ_swiglu_2.remove()
+        plt.title("Histogram for the 3rd SwiGLU layer (random batches):")
+        plt.show()

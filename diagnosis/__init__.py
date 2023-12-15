@@ -1,6 +1,13 @@
-__all__ = ["lr_diagnose", "swiglu_diagnose", "gradient_diagnose", "gdr_diagnose"]
+__all__ = [
+    "diagnosis",
+    "lr_diagnose",
+    "swiglu_diagnose",
+    "gradient_diagnose",
+    "gdr_diagnose",
+]
 
-from .lr_diagnose import lr_diagnose
-from .swiglu_diagnose import swiglu_diagnose
-from .gradient_diagnose import gradient_diagnose
-from .gdratio_diagnose import gdratio_diagnose
+from .diagnosis import Diagnose
+from .lr_diagnose import LrDiagnose
+from .gradient_diagnose import GradDiagnose
+from .swiglu_diagnose import SwigluDiagnose
+from .gdratio_diagnose import GdrDiagnose

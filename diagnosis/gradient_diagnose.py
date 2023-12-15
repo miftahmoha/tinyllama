@@ -1,41 +1,45 @@
-from typing import Dict, Optional, Callable
 from copy import deepcopy
-import itertools
-import json
+from tqdm import tqdm
 
 import torch
-from torch import nn
-from torch import Tensor
 import matplotlib.pyplot as plt
 
-from training import train
-from config import train_config, gradient_config
+from diagnosis import Diagnose
+from training import TrainConfig, Trainer
+from models import Llama
 
 
-def gradient_diagnose(
-    model: nn.Module,
-    tokens: Tensor,
-    context_windows: int,
-    num_params_to_track: int = gradient_config["num_params_to_track"],
-):
-    legends = []
+class GradDiagnose(Diagnose):
+    def __init__(self, *, num_params_to_track: int, show_params_name: bool = False):
+        self.num_params_to_track = num_params_to_track
+        self.show_params_name = show_params_name
 
-    model_clone = deepcopy(model)
+    def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
 
-    optimizer = torch.optim.Adam(model_clone.parameters())
-    train(model_clone, tokens, context_windows, *train_config.values(), optimizer)
+        legends = []
 
-    for name, param in itertools.islice(
-        model_clone.named_parameters(), num_params_to_track
-    ):
-        if param.grad is not None:
-            # Access the gradients for the parameter
-            gradients = param.grad
-            hy, hx = torch.histogram(gradients.cpu(), density=True)
-            plt.plot(hx[:-1].detach(), hy.detach())
-            name = ".".join(name.split(".")[-2:])
-            legends.append(f"Param name: {name}")
+        model_clone = deepcopy(model)
 
-    plt.title("Gradient density")
-    plt.legend(legends)
-    plt.show()
+        Trainer_ = Trainer(TRAIN_CONFIG)
+        Trainer_.run(model_clone, tokens, hide_progress=True)
+
+        for count, elem in tqdm(
+            enumerate(model_clone.named_parameters()), total=self.num_params_to_track
+        ):
+            if elem[1].grad is not None:
+                # Access the gradients for the parameter
+                gradients = elem[1].grad
+
+                hy, hx = torch.histogram(gradients.cpu(), density=True)
+                plt.plot(hx[:-1].detach(), hy.detach())
+                name = ".".join(elem[0].split(".")[-2:])
+
+                if self.show_params_name:
+                    legends.append(f"Param name: {name}")
+
+                if count > self.num_params_to_track:
+                    break
+
+        plt.title("Gradient density")
+        plt.legend(legends)
+        plt.show()

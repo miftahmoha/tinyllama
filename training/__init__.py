@@ -1,3 +1,3 @@
 __all__ = ["training"]
 
-from .training import train
+from .training import TrainConfig, Trainer

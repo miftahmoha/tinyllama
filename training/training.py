@@ -1,14 +1,11 @@
-from typing import Optional
 from tqdm import tqdm
 
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 import torch
 from torch import nn
 from torch import Tensor
 
-from config import train_config, model_config
+from models import Llama
 
 
 def get_batches(
@@ -16,9 +13,8 @@ def get_batches(
     context_window: int,
     batch_size: int,
     split: str = "train",
-):
-    """
-    Selects random batches and returns them.
+) -> tuple[Tensor, Tensor]:
+    """Selects random batches and returns them.
 
     :param tokens: Tokens (tokenized input corpus)
     :type tokens: Tensor
@@ -27,8 +23,6 @@ def get_batches(
     :param split: Train or test set to get batches from
     :type split: str
     """
-
-    context_window = model_config["context_window"]
 
     train = tokens[: int(0.8 * len(tokens))]
     val = tokens[int(0.8 * len(tokens)) : int(0.9 * len(tokens))]
@@ -51,9 +45,8 @@ def get_batches(
 @torch.no_grad()
 def evaluate_loss(
     model: nn.Module, tokens: Tensor, context_window: int, batch_size: int
-):
-    """
-    Return the loss for batches in the train and validation sets.
+) -> dict[str, float]:
+    """Return the loss for batches in the train and validation sets.
 
     :param model: LLM model
     :type model: nn.Module
@@ -79,65 +72,65 @@ def evaluate_loss(
     return out
 
 
-def train(
-    model: nn.Module,
-    tokens: Tensor,
-    context_window: int,
-    batch_size: int,
-    epochs: int,
-    log_interval: int,
-    optimizer: torch.optim.Optimizer,
-    scheduler: Optional[bool] = None,
-    return_logs: bool = False,
-    return_plot: bool = False,
-    show_progress: bool = True,
-):
-    """
-    Trains the LLM model.
+class TrainConfig:
+    def __init__(self, **kwargs):
+        try:
+            self.batch_size = kwargs.pop("batch_size")
+            self.epochs = kwargs.pop("epochs")
+            self.log_interval = kwargs.pop("log_interval", 10)
+        except KeyError as e:
+            print(f"Missing keyword argument {e}=... in TrainConfig")
+            raise SystemExit
+
+    def __getitem__(self, name: str):
+        return self.__getattribute__(name)
+
+    def __setitem__(self, name: str, value: int):
+        self.__setattr__(name, value)
 
 
-    :param model: LLM model
-    :type model: nn.Module
-    :param tokens: Tokens (tokenized input corpus)
-    :type tokens: Tensor
-    :param config: Configuration file containing model hyperparameters
-    :type config: Dict
-    :param optimizer: Optimizer for LLM model
-    :type optimizer: torch.optim.Optimizer
-    :param scheduler: Scheduler for step size
-    :type scheduler: torch.optim.Scheduler
-    :param return_logs: Activates logs for training
-    :type return_logs: Boolean
-    :param return_plot: Returns loss plot
-    :type return_plot: Boolean
-    :param show_progress: Activates progress bar
-    :type show_progress: Boolean
-    """
+class Trainer:
+    """Base class for training a Llama model"""
 
-    losses = []
-    # x, y = get_batches(tokens, config, split="train")
-    x, y = get_batches(tokens, context_window, batch_size, split="train")
+    TRAIN_CONFIG: TrainConfig
 
-    for epoch in tqdm(range(epochs), disable=not show_progress):
-        optimizer.zero_grad()
-        logits, loss = model(x, y)
-        loss.backward()
-        optimizer.step()
+    def __init__(self, TRAIN_CONFIG: TrainConfig):
+        self.TRAIN_CONFIG = TRAIN_CONFIG
 
-        if scheduler:
-            scheduler.step()
+    def run(
+        self,
+        model: Llama,
+        tokens: Tensor,
+        show_logs: bool = False,
+        hide_progress: bool = False,
+        scheduler=None,
+    ) -> list:
 
-        if epoch % log_interval == 0:
-            out = evaluate_loss(model, tokens, context_window, batch_size)
-            losses += [out]
-            if return_logs:
-                print(
-                    f'Epoch: {epoch} | training loss: {out["train"]} | validation loss: {out["val"]}'
+        optimizer = torch.optim.Adam(model.parameters())
+
+        losses = []
+        x, y = get_batches(
+            tokens, model.context_window, self.TRAIN_CONFIG.batch_size, split="train"
+        )
+
+        for epoch in tqdm(range(self.TRAIN_CONFIG.epochs), disable=hide_progress):
+            optimizer.zero_grad()
+            _, loss = model(x, y)
+            loss.backward()
+            optimizer.step()
+
+            if scheduler:
+                scheduler.step()
+
+            if epoch % self.TRAIN_CONFIG.log_interval == 0:
+                out = evaluate_loss(
+                    model, tokens, model.context_window, self.TRAIN_CONFIG.batch_size
                 )
-    # print(f'val loss: {losses[-5]["val"]}')
+                losses += [out]
+                if show_logs:
+                    print(
+                        f'Epoch: {epoch} | training loss: {out["train"]} | validation loss: {out["val"]}'
+                    )
+        # print(f'val loss: {losses[-5]["val"]}')
 
-    if return_plot:
-        pd.DataFrame(losses).plot()
-        plt.show()
-    else:
         return losses

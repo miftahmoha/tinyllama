@@ -1,5 +1,4 @@
 from collections import OrderedDict
-import json
 
 import torch
 from torch import Tensor
@@ -11,10 +10,8 @@ from normalization import RMSnorm
 from encoding import get_rotary_matrix
 from activations import SwiGLU
 
-from training import train
-from diagnosis import lr_diagnose, swiglu_diagnose, gradient_diagnose, gdratio_diagnose
-from gptuner import gptune
-from config import train_config, model_config
+# depends on tokenizer, keep it constant for now
+vocab_size = 73
 
 
 class roPEAttentionHead(nn.Module):
@@ -99,12 +96,7 @@ class LlamaBlock(nn.Module):
 
 class Llama(nn.Module):
     def __init__(
-        self,
-        vocab_size: int = model_config["vocab_size"],
-        context_window: int = model_config["context_window"],
-        emb_dim: int = model_config["emb_dim"],
-        n_heads: int = model_config["n_heads"],
-        n_blocks: int = model_config["n_blocks"],
+        self, *, context_window: int, emb_dim: int, n_heads: int, n_blocks: int
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -126,7 +118,6 @@ class Llama(nn.Module):
         )
         self.last_linear = nn.Linear(emb_dim, vocab_size)
         print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
-        self.tokens = None
         self.context_window = context_window
 
     def forward(self, x: Tensor, targets: Tensor = None):
@@ -144,48 +135,3 @@ class Llama(nn.Module):
         else:
             loss = F.cross_entropy(logits.view(-1, self.vocab_size), targets.view(-1))
             return logits, loss
-
-    def setup_tokens(self, tokens: Tensor):
-        self.tokens = tokens
-
-    def train_model(
-        self,
-        batch_size: int = train_config["batch_size"],
-        epochs: int = train_config["epochs"],
-        log_interval: int = train_config["log_interval"],
-    ):
-        if self.tokens is not None:
-            optimizer = torch.optim.Adam(self.parameters())
-            train(
-                self,
-                self.tokens,
-                self.context_window,
-                batch_size,
-                epochs,
-                log_interval,
-                optimizer,
-            )
-        else:
-            raise ValueError(
-                f"You must initialize model {type(self)} with model.setup_tokens(tokens)."
-            )
-
-    def diagnose_model(self, diagnosis_choice: str = "lr", **kwargs):
-        if self.tokens is not None:
-            match diagnosis_choice:
-                case "lr":
-                    lr_diagnose(self, self.tokens, self.context_window, **kwargs)
-                case "swiglu":
-                    swiglu_diagnose(self, self.tokens, self.context_window, **kwargs)
-                case "gradients":
-                    gradient_diagnose(self, self.tokens, self.context_window, **kwargs)
-                case "gdratio":
-                    gdratio_diagnose(self, self.tokens, self.context_window, **kwargs)
-                case "gptune":
-                    gptune(self, self.tokens, self.context_window, **kwargs)
-                case _:
-                    raise ValueError("This is not a valid argument.")
-        else:
-            raise ValueError(
-                f"You must initialize model {type(self)} with model.setup_tokens(tokens)."
-            )

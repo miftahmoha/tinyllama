@@ -1,56 +1,47 @@
 from collections import defaultdict
 from tqdm import tqdm
 from copy import deepcopy
-import itertools
-import json
 
 import torch
-from torch import Tensor
 import matplotlib.pyplot as plt
 
-from training import train
-from config import train_config, gdratio_config
+from models import Llama
+from training import Trainer, TrainConfig
+from diagnosis import Diagnose
 
 
-def gdratio_diagnose(
-    model,
-    tokens: Tensor,
-    context_window: int,
-    num_iters: int = gdratio_config["num_iters"],
-    num_params_to_track: int = gdratio_config["num_params_to_track"],
-):
-    legends = []
+class GdrDiagnose(Diagnose):
+    def __init__(self, *, num_iters: int, num_params_to_track: int):
+        self.num_iters = num_iters
+        self.num_params_to_track = num_params_to_track
 
-    model_clone = deepcopy(model)
+    def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
 
-    gd_records = defaultdict(list)
+        legends = []
 
-    optimizer = torch.optim.Adam(model_clone.parameters())
-    train_config.update({"epochs": 1})
+        model_clone = deepcopy(model)
 
-    for _ in tqdm(range(num_iters)):
-        train(
-            model_clone,
-            tokens,
-            context_window,
-            *train_config.values(),
-            optimizer,
-            show_progress=False,
-        )
+        TRAIN_CONFIG["epochs"] = 1
+        Trainer_ = Trainer(TRAIN_CONFIG)
 
-        for name, param in itertools.islice(
-            model_clone.named_parameters(), num_params_to_track
-        ):
-            if param.grad is not None:
-                gd_records[name].append(
-                    param.grad.cpu().std() / param.detach().cpu().std()
-                )
+        gd_records = defaultdict(list)
+        for _ in tqdm(range(self.num_iters), colour="green"):
+            Trainer_.run(model_clone, tokens, hide_progress=True)
 
-    for name, gdr_value in gd_records.items():
-        name = ".".join(name.split(".")[-2:])
-        legends.append(f"Param name: {name}")
-        plt.plot(gdr_value)
+            for count, elem in enumerate(model_clone.named_parameters()):
+                if elem[1].grad is not None:
+                    gd_records[elem[0]].append(
+                        elem[1].grad.cpu().std() / elem[1].detach().cpu().std()
+                    )
 
-    plt.title("Gradient / Data ratio")
-    plt.legend(legends)
-    plt.show()
+                if count > self.num_params_to_track:
+                    break
+
+        for name, gdr_list in gd_records.items():
+            name = ".".join(name.split(".")[-2:])
+            legends.append(f"Param name: {name}")
+            plt.plot(gdr_list)
+
+        plt.title("Gradient / Data ratio")
+        plt.legend(legends)
+        plt.show()
