@@ -1,10 +1,16 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 
 import torch
 
 
 class Tokenizer(ABC):
-    pass
+    @abstractmethod
+    def tokenize(self, corpus: str):
+        raise NotImplementedError
+
+    @abstractmethod
+    def untokenize(self, tokens: torch.Tensor):
+        raise NotImplementedError
 
 
 class CharacterTokenizer(Tokenizer):

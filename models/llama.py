@@ -26,10 +26,15 @@ class roPEAttentionHead(nn.Module):
         self.w_v = nn.Linear(emb_dim, emb_dim)
 
         self.R = get_rotary_matrix(context_window, emb_dim)
+        self.kvcache = {}
 
     def forward(self, x: Tensor, return_attn_weights: bool = False):
         # x = self.embedding(x)
         B, C, emb_dim = x.shape
+
+        # kvcache
+        if self.kvcache:
+            pass
 
         # computes queries, keys & values
         q = self.w_q(x)

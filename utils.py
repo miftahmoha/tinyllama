@@ -5,7 +5,8 @@ import torch
 from torch import nn
 from PyPDF2 import PdfReader
 
-from tokenizers_ import Tokenizer
+from tokenizers_ import Tokenizer, CharacterTokenizer
+from models import Llama
 
 # set device to gpu
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -51,7 +52,12 @@ def get_pdf_text(pdf_docs: list[PdfReader]):
     return text
 
 
-def simple_makemore(corpus: str, tokenizer: Tokenizer, model: nn.Module, config: dict):
+def simple_makemore(
+    model: Llama,
+    corpus: str = "",
+    num_tokens: int = 50,
+    tokenizer: Tokenizer = CharacterTokenizer(),
+):
     """
     Generates random samples from LLM model.
 
@@ -65,23 +71,23 @@ def simple_makemore(corpus: str, tokenizer: Tokenizer, model: nn.Module, config:
     :type config: Dict
     """
 
-    tok_input = (
+    tokens_in = (
         torch.tensor(tokenizer.tokenize(corpus), dtype=torch.long)
         .view((1, -1))
         .to(device)
     )
 
-    # number of tokens to generate
-    num_tokens = 50
+    tokens_out = torch.Tensor([]).to(device)
 
-    tok_output = torch.Tensor([]).to(device)
-    for token in tqdm(range(num_tokens)):
-        logits = model(tok_input)
+    for _ in tqdm(range(num_tokens)):
+        logits = model(tokens_in)
         probs = nn.functional.softmax(logits[:, -1, :], dim=-1)
 
-        next_tok = torch.multinomial(probs, num_samples=1)
-        tok_output = torch.cat((tok_output, next_tok), dim=0)
-        tok_input = torch.cat((tok_input, next_tok), dim=1)
+        next_token = torch.multinomial(probs, num_samples=1)
 
-    output_text = tokenizer.untokenize(tok_output.view(-1))
+        tokens_out = torch.cat((tokens_out, next_token), dim=0)
+        tokens_in = torch.cat((tokens_in, next_token), dim=1)
+
+    output_text = tokenizer.untokenize(tokens_out.view(-1))
+
     return output_text
