@@ -52,7 +52,7 @@ def get_pdf_text(pdf_docs: list[PdfReader]):
     return text
 
 
-def simple_makemore(
+def simple_makemore_(
     model: Llama,
     corpus: str = "",
     num_tokens: int = 50,
@@ -87,6 +87,51 @@ def simple_makemore(
 
         tokens_out = torch.cat((tokens_out, next_token), dim=0)
         tokens_in = torch.cat((tokens_in, next_token), dim=1)
+
+    output_text = tokenizer.untokenize(tokens_out.view(-1))
+
+    return output_text
+
+
+def generate(
+    model: Llama,
+    corpus: str = "",
+    num_tokens: int = 50,
+    tokenizer: Tokenizer = CharacterTokenizer(),
+    inference_mode: bool = True,
+):
+    """
+    Generates random samples from LLM model.
+
+    :param corpus: Corpus containg text
+    :type corpus: str
+    :param tokenizer: Tokenizer
+    :type tokenizer: CharacterTokenizer
+    :param model: LLM model
+    :type model: nn.Module
+    :param config: Configuration file
+    :type config: Dict
+    """
+
+    tokens_in = (
+        torch.tensor(tokenizer.tokenize(corpus), dtype=torch.long)
+        .view((1, -1))
+        .to(device)
+    )
+
+    tokens_out = torch.Tensor([]).to(device)
+
+    for _ in tqdm(range(num_tokens)):
+        logits = model(tokens_in, inference_mode=inference_mode)
+        probs = nn.functional.softmax(logits[:, -1, :], dim=-1)
+
+        next_token = torch.multinomial(probs, num_samples=1)
+
+        tokens_out = torch.cat((tokens_out, next_token), dim=0)
+        if inference_mode:
+            tokens_in = next_token
+        else:
+            tokens_in = torch.cat((tokens_in, next_token), dim=1)
 
     output_text = tokenizer.untokenize(tokens_out.view(-1))
 
