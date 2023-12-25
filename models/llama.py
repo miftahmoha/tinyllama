@@ -26,14 +26,12 @@ class roPEAttentionHead(nn.Module):
         self.w_v = nn.Linear(emb_dim, emb_dim)
 
         self.R = get_rotary_matrix(context_window, emb_dim)
-        self.kvcache = {
+        self.cache = {
             "keys": torch.empty(1, 0, emb_dim).cuda(),
             "values": torch.empty(1, 0, emb_dim).cuda(),
         }
 
-    def forward(
-        self, x: Tensor, inference_mode: bool, return_attn_weights: bool = False
-    ):
+    def forward(self, x: Tensor, kv_cache: bool, return_attn_weights: bool = False):
         # x = self.embedding(x)
         B, C, emb_dim = x.shape
 
@@ -46,9 +44,9 @@ class roPEAttentionHead(nn.Module):
         q_rot = torch.bmm(q.transpose(0, 1), self.R[:C].transpose(1, 2)).transpose(0, 1)
         k_rot = torch.bmm(k.transpose(0, 1), self.R[:C].transpose(1, 2)).transpose(0, 1)
 
-        if inference_mode:
-            self.kvcache["keys"] = torch.cat((self.kvcache["keys"], k_rot), dim=1)
-            self.kvcache["values"] = torch.cat((self.kvcache["values"], v), dim=1)
+        if kv_cache:
+            self.cache["keys"] = torch.cat((self.cache["keys"], k_rot), dim=1)
+            self.cache["values"] = torch.cat((self.cache["values"], v), dim=1)
 
         activations = F.scaled_dot_product_attention(
             q_rot, k_rot, v, dropout_p=0.2, is_causal=True
@@ -73,8 +71,8 @@ class roPEMultiAttentionHead(nn.Module):
         self.linear = nn.Linear(emb_dim * n_heads, emb_dim)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, x: Tensor, inference_mode: bool):
-        x = [head(x, inference_mode) for head in self.heads]
+    def forward(self, x: Tensor, kvcache: bool):
+        x = [head(x, kvcache) for head in self.heads]
         x = torch.cat(x, dim=-1)
 
         x = self.linear(x)
@@ -97,15 +95,15 @@ class LlamaBlock(nn.Module):
         self.last_linear = nn.Linear(emb_dim, vocab_size)
 
     def forward(self, params: tuple[Tensor, bool]):
-        x, inference_mode = params
+        x, kvcache = params
 
         x = self.rms(x)  # (B, C, emb_dim)
-        x = x + self.multi_attn_head(x, inference_mode)  # (B, C, emb_dim)
+        x = x + self.multi_attn_head(x, kvcache)  # (B, C, emb_dim)
 
         x = self.rms(x)  # (B, C, emb_dim)
         x = x + self.linear(x)  # (B, C, emb_dim)
 
-        return x, inference_mode
+        return x, kvcache
 
 
 class Llama(nn.Module):
@@ -134,10 +132,10 @@ class Llama(nn.Module):
         print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
         self.context_window = context_window
 
-    def forward(self, x: Tensor, inference_mode: bool = False, targets: Tensor = None):
+    def forward(self, x: Tensor, kvcache: bool = False, targets: Tensor = None):
         x = self.embedding(x)  # (B, C, emb_dim)
 
-        x = self.llama_block_seq((x, inference_mode))  # (B, C, emb_dim)
+        x = self.llama_block_seq((x, kvcache))  # (B, C, emb_dim)
 
         x = self.linear(x[0])  # (B, C, emb_dim)
 
