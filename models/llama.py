@@ -15,14 +15,14 @@ vocab_size = 73
 
 
 class roPEAttentionHead(nn.Module):
-    def __init__(self, context_window: int, emb_dim: int):
+    def __init__(self, context_window: int, emb_dim: int, w_q: Tensor, w_k: Tensor):
         super().__init__()
         self.emb_dim = emb_dim
         self.embedding = nn.Embedding(context_window, emb_dim)
         self.rms = RMSnorm((context_window, emb_dim))
 
-        self.w_q = nn.Linear(emb_dim, emb_dim)
-        self.w_k = nn.Linear(emb_dim, emb_dim)
+        self.w_q = w_q
+        self.w_k = w_k
         self.w_v = nn.Linear(emb_dim, emb_dim)
 
         self.R = get_rotary_matrix(context_window, emb_dim)
@@ -63,16 +63,24 @@ class roPEAttentionHead(nn.Module):
 
 
 class roPEMultiAttentionHead(nn.Module):
-    def __init__(self, context_window: int, emb_dim: int, n_heads: int):
+    def __init__(self, context_window: int, emb_dim: int, n_heads: int, gq_ratio: int):
         super().__init__()
-        self.heads = nn.ModuleList(
-            [roPEAttentionHead(context_window, emb_dim) for i in range(n_heads)]
-        )
+
+        self.heads = []
+        for i in range(n_heads):
+
+            if i % gq_ratio == 0:
+                w_q = nn.Linear(emb_dim, emb_dim)
+                w_k = nn.Linear(emb_dim, emb_dim)
+
+            self.heads += [roPEAttentionHead(context_window, emb_dim, w_q, w_k)]
+        self.heads = nn.ModuleList(self.heads)
+
         self.linear = nn.Linear(emb_dim * n_heads, emb_dim)
         self.dropout = nn.Dropout(0.2)
 
-    def forward(self, x: Tensor, kvcache: bool):
-        x = [head(x, kvcache) for head in self.heads]
+    def forward(self, x: Tensor, kv_cache: bool):
+        x = [head(x, kv_cache) for head in self.heads]
         x = torch.cat(x, dim=-1)
 
         x = self.linear(x)
@@ -83,11 +91,18 @@ class roPEMultiAttentionHead(nn.Module):
 
 class LlamaBlock(nn.Module):
     def __init__(
-        self, vocab_size: int, context_window: int, emb_dim: int, n_heads: int
+        self,
+        vocab_size: int,
+        context_window: int,
+        emb_dim: int,
+        n_heads: int,
+        gq_ratio: int,
     ):
         super().__init__()
         self.rms = RMSnorm((context_window, emb_dim))
-        self.multi_attn_head = roPEMultiAttentionHead(context_window, emb_dim, n_heads)
+        self.multi_attn_head = roPEMultiAttentionHead(
+            context_window, emb_dim, n_heads, gq_ratio
+        )
         self.linear = nn.Sequential(
             nn.Linear(emb_dim, emb_dim),
             SwiGLU(emb_dim),
@@ -95,20 +110,26 @@ class LlamaBlock(nn.Module):
         self.last_linear = nn.Linear(emb_dim, vocab_size)
 
     def forward(self, params: tuple[Tensor, bool]):
-        x, kvcache = params
+        x, kv_cache = params
 
         x = self.rms(x)  # (B, C, emb_dim)
-        x = x + self.multi_attn_head(x, kvcache)  # (B, C, emb_dim)
+        x = x + self.multi_attn_head(x, kv_cache)  # (B, C, emb_dim)
 
         x = self.rms(x)  # (B, C, emb_dim)
         x = x + self.linear(x)  # (B, C, emb_dim)
 
-        return x, kvcache
+        return x, kv_cache
 
 
 class Llama(nn.Module):
     def __init__(
-        self, *, context_window: int, emb_dim: int, n_heads: int, n_blocks: int
+        self,
+        *,
+        context_window: int,
+        emb_dim: int,
+        n_heads: int,
+        n_blocks: int,
+        gq_ratio: int = 1,
     ):
         super().__init__()
         self.vocab_size = vocab_size
@@ -118,7 +139,9 @@ class Llama(nn.Module):
                 [
                     (
                         f"llama_{i}",
-                        LlamaBlock(vocab_size, context_window, emb_dim, n_heads),
+                        LlamaBlock(
+                            vocab_size, context_window, emb_dim, n_heads, gq_ratio
+                        ),
                     )
                     for i in range(n_blocks)
                 ]
@@ -132,10 +155,10 @@ class Llama(nn.Module):
         print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
         self.context_window = context_window
 
-    def forward(self, x: Tensor, kvcache: bool = False, targets: Tensor = None):
+    def forward(self, x: Tensor, targets: Tensor = None, kv_cache: bool = False):
         x = self.embedding(x)  # (B, C, emb_dim)
 
-        x = self.llama_block_seq((x, kvcache))  # (B, C, emb_dim)
+        x = self.llama_block_seq((x, kv_cache))  # (B, C, emb_dim)
 
         x = self.linear(x[0])  # (B, C, emb_dim)
 
