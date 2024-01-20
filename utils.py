@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from PyPDF2 import PdfReader
 
-from tokenizers_ import Tokenizer, CharacterTokenizer
+from tokenizers_ import CharacterTokenizer
 from models import Llama
 
 # set device to gpu
@@ -36,27 +36,38 @@ def pre_process_corpus(parse_func: Callable[..., str]):
 
 
 @pre_process_corpus
-def get_pdf_text(pdf_docs: list[PdfReader]):
+def get_pdf_text(pdf_path: str) -> str:
     """
-    Reads a list of PDFs.
-
-    :param pdf_docs: List containing the PDFs
-    :type pdf_docs: list[PdfReader]
+    Reads a .pdf file.
     """
 
     text = ""
-    for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
+    pdf_reader = PdfReader(pdf_path)
+    for page in pdf_reader.pages:
+        text += page.extract_text()
     return text
+
+
+@pre_process_corpus
+def get_text(txt_path: str) -> str:
+    """
+    Reads a .txt file.
+    """
+
+    try:
+        with open(txt_path, "r") as file:
+            content = file.read()
+            return content
+    except FileNotFoundError:
+        print(f"Error: File '{txt_path}' not found.")
+        return ""
 
 
 def generate(
     model: Llama,
     corpus: str = "",
     num_tokens: int = 50,
-    tokenizer: Tokenizer = CharacterTokenizer(),
+    tokenizer: CharacterTokenizer = CharacterTokenizer(),
     kv_cache: bool = True,
 ):
     """
