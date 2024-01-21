@@ -5,9 +5,9 @@ from copy import deepcopy
 import torch
 import matplotlib.pyplot as plt
 
-from models import Llama
-from training import Trainer, TrainConfig
-from diagnosis import Diagnose
+from ..models import Llama
+from ..training import Trainer, TrainConfig
+from ..diagnosis import Diagnose
 
 
 class GdrDiagnose(Diagnose):

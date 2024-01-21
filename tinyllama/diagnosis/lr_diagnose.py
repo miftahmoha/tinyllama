@@ -5,9 +5,9 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-from training import TrainConfig, Trainer
-from diagnosis import Diagnose
-from models import Llama
+from ..training import TrainConfig, Trainer
+from ..diagnosis import Diagnose
+from ..models import Llama
 
 
 class LrDiagnose(Diagnose):

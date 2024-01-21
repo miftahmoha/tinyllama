@@ -3,9 +3,9 @@ from copy import deepcopy
 import torch
 import matplotlib.pyplot as plt
 
-from diagnosis import Diagnose
-from training import TrainConfig, Trainer
-from models import Llama
+from ..diagnosis import Diagnose
+from ..training import TrainConfig, Trainer
+from ..models import Llama
 
 
 # a dict to store the activations

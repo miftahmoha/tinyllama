@@ -3,7 +3,7 @@ from tqdm import tqdm
 import torch
 import matplotlib.pyplot as plt
 
-from models import Llama
+from ..models import Llama
 
 
 class GradPlot:

@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch import Tensor
 
-from models import Llama
+from ..models import Llama
 
 
 def get_batches(
@@ -14,14 +14,8 @@ def get_batches(
     batch_size: int,
     split: str = "train",
 ) -> tuple[Tensor, Tensor]:
-    """Selects random batches and returns them.
-
-    :param tokens: Tokens (tokenized input corpus)
-    :type tokens: Tensor
-    :param config: Configuration file containing model hyperparameters
-    :type config: Dict
-    :param split: Train or test set to get batches from
-    :type split: str
+    """
+    Selects random batches and returns them.
     """
 
     train = tokens[: int(0.8 * len(tokens))]
@@ -46,14 +40,8 @@ def get_batches(
 def evaluate_loss(
     model: nn.Module, tokens: Tensor, context_window: int, batch_size: int
 ) -> dict[str, float]:
-    """Return the loss for batches in the train and validation sets.
-
-    :param model: LLM model
-    :type model: nn.Module
-    :param tokens: Tokens (tokenized input corpus)
-    :type tokens: Tensor
-    :param config: Configuration file containing model hyperparameters
-    :type config: Dict
+    """
+    Return the loss for batches in the train and validation sets.
     """
 
     out = {}

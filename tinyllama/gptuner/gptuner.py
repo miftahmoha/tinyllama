@@ -13,12 +13,12 @@ import pandas as pd
 import torch
 import stan
 
-from diagnosis import Diagnose
-from training import TrainConfig, Trainer
-from models import Llama
+from ..diagnosis import Diagnose
+from ..training import TrainConfig, Trainer
+from ..models import Llama
 
 # reads the STAN model
-with open("./gptuner/gptuner.stan", "r") as file:
+with open("./tinyllama/gptuner/gptuner.stan", "r") as file:
     gptuner_stan = file.read()
 
 

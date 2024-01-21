@@ -6,9 +6,9 @@ from torch import nn
 import torch.nn.functional as F
 import numpy as np
 
-from normalization import RMSnorm
-from encoding import get_rotary_matrix
-from activations import SwiGLU
+from ..normalization import RMSnorm
+from ..encoding import get_rotary_matrix
+from ..activations import SwiGLU
 
 # depends on tokenizer, keep it constant for now
 vocab_size = 73

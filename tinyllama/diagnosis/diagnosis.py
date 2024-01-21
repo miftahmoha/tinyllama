@@ -3,8 +3,8 @@ from typing import Any
 
 from torch import Tensor
 
-from models import Llama
-from training import TrainConfig
+from ..models import Llama
+from ..training import TrainConfig
 
 
 class Diagnose(ABC):
