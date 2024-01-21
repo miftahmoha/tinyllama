@@ -1,12 +1,15 @@
 """
 Hyperparameter tuner for tinyllama using Bayesian implementation of a noiseless Gaussian Process using STAN.
 """
+
 from copy import deepcopy
 from tqdm import tqdm
 
 import numpy as np
 from scipy.stats import qmc
-import matplotlib.pyplot as plt
+
+# import matplotlib.pyplot as plt
+import pandas as pd
 import torch
 import stan
 
@@ -19,7 +22,14 @@ with open("./gptuner/gptuner.stan", "r") as file:
     gptuner_stan = file.read()
 
 
-def process_results(results, X_train, Y_train, X_test, N_val):
+def process_results(
+    results: stan.fit.Fit,
+    X_train: np.ndarray,
+    Y_train: np.ndarray,
+    X_test: np.ndarray,
+    N_val: int,
+    hyperparam_to_tune: list[str],
+):
     """
     Process results and plots a 3D plot with the mean, 25% and 75% percentiles.
 
@@ -46,6 +56,14 @@ def process_results(results, X_train, Y_train, X_test, N_val):
     Y_25qtl = np.hstack((Y_train, Y_test_25qtl))
     Y_75qtl = np.hstack((Y_train, Y_test_75qtl))
 
+    # Concatenating
+    combined_matrix = np.column_stack((X, Y_25qtl, Y_mean, Y_75qtl))
+
+    dataframe = pd.DataFrame(
+        combined_matrix, columns=hyperparam_to_tune + ["Y_25qtl", "Y_mean", "Y_75qtl"]
+    )
+
+    """
     # Create 3D surface
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
@@ -63,6 +81,9 @@ def process_results(results, X_train, Y_train, X_test, N_val):
     ax.set_title("3D Surface Plot")
 
     plt.show()
+    """
+
+    return dataframe
 
 
 class GPTuneConfig:
@@ -105,9 +126,6 @@ class GPTune(Diagnose):
             self.GPTUNE_CONFIG["hyperparams_to_tune"]
         )
 
-        if M > 2:
-            raise Exception("Go only for 2 dimensional space")
-
         # get latin hypercube distributed samples for hyperparameters
         sampler = qmc.LatinHypercube(d=M)
         sample = sampler.random(n=N_train)
@@ -117,7 +135,7 @@ class GPTune(Diagnose):
         )
 
         # training & retrieve validation error for each sampled hyperparameter
-        Y_train = []
+        Y_train = np.array([])
         for hyperparam in tqdm(X_train, total=N_train, colour="blue"):
             model_clone = deepcopy(model)
 
@@ -140,13 +158,14 @@ class GPTune(Diagnose):
                         f"The parameter {hyperparam_to_tune} is inexistant"
                     )
 
-            Y_train += [
+            Y_train = np.append(
+                Y_train,
                 float(
                     Trainer(TRAIN_CONFIG).run(model_clone, tokens, hide_progress=True)[
                         -1
                     ]["train"]
-                )
-            ]
+                ),
+            )
 
         # N_train, M = X_train.shape
 
@@ -168,6 +187,14 @@ class GPTune(Diagnose):
         }
         posterior = stan.build(gptuner_stan, data=data)
         fit_results = posterior.sample(num_chains=4, num_samples=num_stan_samples)
-        # needs further considerations, return min, plot if dim <= 3, else return min
-        results = process_results(fit_results, X_train, Y_train, X_test, N_val)
+        # print(type(posterior), type(fit_results), type(X_train), type(Y_train), type(X_test))
+        results = process_results(
+            fit_results,
+            X_train,
+            Y_train,
+            X_test,
+            N_val,
+            self.GPTUNE_CONFIG["hyperparams_to_tune"],
+        )
+
         return results
