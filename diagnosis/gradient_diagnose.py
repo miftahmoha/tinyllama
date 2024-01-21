@@ -1,30 +1,22 @@
-from copy import deepcopy
 from tqdm import tqdm
 
 import torch
 import matplotlib.pyplot as plt
 
-from diagnosis import Diagnose
-from training import TrainConfig, Trainer
 from models import Llama
 
 
-class GradDiagnose(Diagnose):
+class GradPlot:
     def __init__(self, *, num_params_to_track: int, show_params_name: bool = False):
         self.num_params_to_track = num_params_to_track
         self.show_params_name = show_params_name
 
-    def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
+    def run(self, model: Llama):
 
         legends = []
 
-        model_clone = deepcopy(model)
-
-        Trainer_ = Trainer(TRAIN_CONFIG)
-        Trainer_.run(model_clone, tokens, hide_progress=True)
-
         for count, elem in tqdm(
-            enumerate(model_clone.named_parameters()), total=self.num_params_to_track
+            enumerate(model.named_parameters()), total=self.num_params_to_track
         ):
             if elem[1].grad is not None:
                 # Access the gradients for the parameter
