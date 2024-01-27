@@ -1,18 +1,16 @@
-from tqdm import tqdm
-
-import torch
 import matplotlib.pyplot as plt
+import torch
+from tqdm import tqdm
 
 from ..models import Llama
 
 
-class GradPlot:
+class GradDiagnose:
     def __init__(self, *, num_params_to_track: int, show_params_name: bool = False):
         self.num_params_to_track = num_params_to_track
         self.show_params_name = show_params_name
 
     def run(self, model: Llama):
-
         legends = []
 
         for count, elem in tqdm(

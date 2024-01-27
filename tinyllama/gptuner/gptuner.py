@@ -3,19 +3,20 @@ Hyperparameter tuner for tinyllama using Bayesian implementation of a noiseless 
 """
 
 from copy import deepcopy
-from tqdm import tqdm
 
 import numpy as np
-from scipy.stats import qmc
 
 # import matplotlib.pyplot as plt
 import pandas as pd
-import torch
 import stan
+import torch
+from scipy.stats import qmc
+from tqdm import tqdm
 
 from ..diagnosis import Diagnose
-from ..training import TrainConfig, Trainer
 from ..models import Llama
+from ..training import TrainConfig, Trainer
+
 
 # reads the STAN model
 with open("./tinyllama/gptuner/gptuner.stan", "r") as file:
@@ -121,9 +122,9 @@ class GPTune(Diagnose):
         TRAIN_CONFIG: TrainConfig,
         num_stan_samples: int = 50,
     ):
-
-        N_train, M = self.GPTUNE_CONFIG["num_training_samples"], len(
-            self.GPTUNE_CONFIG["hyperparams_to_tune"]
+        N_train, M = (
+            self.GPTUNE_CONFIG["num_training_samples"],
+            len(self.GPTUNE_CONFIG["hyperparams_to_tune"]),
         )
 
         # get latin hypercube distributed samples for hyperparameters

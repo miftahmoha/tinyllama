@@ -1,9 +1,7 @@
-from tqdm import tqdm
-
 import numpy as np
 import torch
-from torch import nn
-from torch import Tensor
+from torch import nn, Tensor
+from tqdm import tqdm
 
 from ..models import Llama
 
@@ -44,10 +42,10 @@ def evaluate_loss(
     Return the loss for batches in the train and validation sets.
     """
 
-    out = {}
+    out: dict[str, float] = {}
+
     model.eval()
 
-    out = {}
     for split in ["train", "val"]:
         for i in range(10):
             losses = []
@@ -93,7 +91,6 @@ class Trainer:
         hide_progress: bool = False,
         scheduler=None,
     ) -> list:
-
         optimizer = torch.optim.Adam(model.parameters())
 
         losses = []

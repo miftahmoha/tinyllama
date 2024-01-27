@@ -1,0 +1,49 @@
+[project]
+name = "tinyllama"
+version = "0.0.2"
+description = "Model classes and pre-training utilities for a tiny version of Llama in PyTorch."
+readme = "README.md"
+requires-python ="~=3.9"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Achraf Miftah", email = "mbns.miftah.achraf@gmail.com"},
+]
+keywords = ["llama", "llm", "deep-learning", "tinyllama"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+urls = {repository = "https://github.com/miftahmoha/tinyllama"}
+dependencies = ["torch>=2.0.0", "pandas>=2.1.1", "PyPDF2>=3.0.1", "matplotlib>=3.8.0", "numpy>=1.25.2", "pystan>=3.5.0"]
+
+[project.optional-dependencies]
+dev = ["pip-tools", "pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = ["tinyllama/*"]
+
+[tool.ruff]
+extend-include = ["*.ipynb"]
+fixable = ["I001", "F401"]
+ignore = ["E402", "E721", "E731", "E741", "F722"]
+ignore-init-module-imports = true
+select = ["E", "F", "I001"]
+src = []
+
+[tool.ruff.isort]
+combine-as-imports = true
+extra-standard-library = ["typing_extensions"]
+lines-after-imports = 2
+order-by-type = false

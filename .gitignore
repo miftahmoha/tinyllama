@@ -1,14 +1,12 @@
 main.py
 main.ipynb
+main_colab.ipynb
 __pycache__/
 .pytest_cache/
-lyrics
-./models/mlp
 ./lyrics
 Dockerfile
 deploy.py
-requirements_deploy.txt
 *.swp
-main_colab.ipynb
 build/
 .ipynb_checkpoints/
+dist/
