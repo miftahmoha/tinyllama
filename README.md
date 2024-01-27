@@ -9,7 +9,13 @@ _Model classes and pre-training utilities for a tiny version of Llama in PyTorch
 
 </div>
 
-## Pre-training a model 🖥️
+## Installation 🚀
+
+``` bash
+pip install tinyllama
+```
+
+## Pre-training a model 🏋‍♀
 
 ### Initializing a tokenizer
 
@@ -18,6 +24,7 @@ With a simple character-level tokenizer:
 ```python
 from tinyllama.tokenizers import CharacterTokenizer
 tokenizer = CharacterTokenizer()
+# '|' is the default eos_token
 tokenizer.add_eos_tokens()
 ```
 
@@ -102,7 +109,7 @@ GdrDiagnose.run(model, tokens, TrainConfig)
 GPTune facilitates hyperparameter tuning by leveraging Gaussian Processes as a means to optimize the tuning process.
 
 ```python
-from gptuner import GPTuneConfig, GPTune
+from tinyllama.gptuner import GPTuneConfig, GPTune
 GPTuneConfig = GPTuneConfig(num_training_samples=100, hyperparams_to_tune=["epochs", "n_heads"], l_bounds=[10, 2], u_bounds=[50, 5], num_evaluations=500)
 GPTune = GPTune(GPTuneConfig)
 GPTune.run(model, tokens, TrainConfig)
@@ -116,4 +123,30 @@ Generates a response to a prompt.
 from tinyllama import generate
 # kv_cache is set to True by default.
 generate(model, prompt, max_tokens=900, kv_cache=True)
+```
+
+## Parsing 📜
+
+Parses single or multiple files.
+
+```python
+# ".txt" files
+from tinyllama.readers import get_text
+corpus = get_text("./txt_path")
+
+# ".pdf" files
+from tinyllama.readers import get_pdf_text
+corpus = get_pdf_text("./pdf_path")
+```
+
+To parse multiple files:
+
+```python
+# ".txt" files
+from tinyllama.readers import get_text
+corpus = ''.join(get_text(pdf_path) for txt_path in txt_paths)
+
+# ".pdf" files
+from tinyllama.readers import get_pdf_text
+corpus = ''.join(get_pdf_text(pdf_path) for pdf_path in pdf_paths)
 ```
