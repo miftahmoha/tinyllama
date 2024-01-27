@@ -1,5 +1,5 @@
-from torch import Tensor
 import torch
+from torch import Tensor
 
 
 class CharacterTokenizer:
@@ -14,5 +14,6 @@ class CharacterTokenizer:
     def untokenize(self, tokens: Tensor):
         return "".join([self.decode[i] for i in tokens.tolist()])
 
-    def add_eos_tokens(self, eos_token: str):
+    def add_eos_tokens(self, eos_token: str = "|"):
+        self.eos_token = eos_token
         self.vocab += eos_token
