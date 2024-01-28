@@ -2,6 +2,7 @@
 Hyperparameter tuner for tinyllama using Bayesian implementation of a noiseless Gaussian Process using STAN.
 """
 
+import os
 from copy import deepcopy
 
 import numpy as np
@@ -19,7 +20,8 @@ from ..training import TrainConfig, Trainer
 
 
 # reads the STAN model
-with open("./tinyllama/gptuner/gptuner.stan", "r") as file:
+script_directory = os.path.dirname(os.path.realpath(__file__))
+with open(script_directory + "/gptuner.stan", "r") as file:
     gptuner_stan = file.read()
 
 
