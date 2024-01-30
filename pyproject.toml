@@ -1,6 +1,6 @@
 [project]
 name = "tinyllama"
-version = "0.0.2"
+version = "0.0.17"
 description = "Model classes and pre-training utilities for a tiny version of Llama in PyTorch."
 readme = "README.md"
 requires-python ="~=3.9"
@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
 urls = {repository = "https://github.com/miftahmoha/tinyllama"}
-dependencies = ["torch>=2.0.0", "pandas>=2.1.1", "PyPDF2>=3.0.1", "matplotlib>=3.8.0", "numpy>=1.25.2", "pystan>=3.5.0"]
+dependencies = ["tqdm", "torch", "pandas", "PyPDF2", "matplotlib", "numpy", "pystan"]
 
 [project.optional-dependencies]
 dev = ["pip-tools", "pytest"]

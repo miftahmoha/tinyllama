@@ -3,10 +3,11 @@ main.ipynb
 main_colab.ipynb
 __pycache__/
 .pytest_cache/
-./lyrics
+lyrics/
 Dockerfile
 deploy.py
 *.swp
 build/
 .ipynb_checkpoints/
 dist/
+requirements.txt
