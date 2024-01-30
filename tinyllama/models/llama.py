@@ -11,6 +11,10 @@ from ..normalization import RMSnorm
 from ..tokenizers import CharacterTokenizer
 
 
+# set device to gpu
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
 class roPEAttentionHead(nn.Module):
     def __init__(self, context_window: int, emb_dim: int, w_q: Tensor, w_k: Tensor):
         super().__init__()
@@ -151,6 +155,7 @@ class Llama(nn.Module):
         self.last_linear = nn.Linear(emb_dim, vocab_size)
         print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
         self.context_window = context_window
+        self.to(device)
 
     def forward(self, x: Tensor, targets: Tensor = None, kv_cache: bool = False):
         x = self.embedding(x)  # (B, C, emb_dim)
