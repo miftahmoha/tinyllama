@@ -3,9 +3,17 @@ from torch import Tensor
 
 
 class CharacterTokenizer:
-    def __init__(self):
-        self.vocab = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !?.,:;'\"\nʼ"
+    def __init__(self, eos_char="#"):
+        self.eos_char = eos_char
+
+        self.vocab = (
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !?.,:;'\"\nʼ"
+            + eos_char
+        )
+
+        # encode
         self.encode = {char: tok for tok, char in enumerate(self.vocab)}
+        # decode
         self.decode = {tok: char for tok, char in enumerate(self.encode)}
 
     def tokenize(self, string: str):
@@ -14,6 +22,10 @@ class CharacterTokenizer:
     def untokenize(self, tokens: Tensor):
         return "".join([self.decode[i] for i in tokens.tolist()])
 
-    def add_eos_tokens(self, eos_token: str = "|"):
-        self.eos_token = eos_token
-        self.vocab += eos_token
+    @property
+    def vocab_size(self):
+        return len(self.vocab)
+
+    @property
+    def eos_token(self):
+        return self.encode[self.eos_char]

@@ -12,16 +12,16 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def generate(
     model: Llama,
-    corpus: str,
+    tokenizer: CharacterTokenizer,
+    prompt: str,
     max_tokens: int = 50,
-    tokenizer: CharacterTokenizer = CharacterTokenizer(),
     kv_cache: bool = True,
 ):
     """
     Generates random samples from LLM model.
     """
 
-    tokens_in = tokenizer.tokenize(corpus).clone().detach().view((1, -1)).to(device)
+    tokens_in = tokenizer.tokenize(prompt).clone().detach().view((1, -1)).to(device)
 
     tokens_out = torch.Tensor([]).to(device)
 
@@ -31,7 +31,8 @@ def generate(
 
         next_token = torch.multinomial(probs, num_samples=1)
 
-        if tokenizer.untokenize(next_token) == tokenizer.eos_token:
+        if next_token == tokenizer.eos_token:
+            print("eos_token is reached!")
             break
 
         tokens_out = torch.cat((tokens_out, next_token), dim=0)

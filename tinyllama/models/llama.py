@@ -1,17 +1,14 @@
 from collections import OrderedDict
 
-import torch
-from torch import Tensor
-from torch import nn
-import torch.nn.functional as F
 import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import nn, Tensor
 
-from ..normalization import RMSnorm
-from ..encoding import get_rotary_matrix
 from ..activations import SwiGLU
-
-# depends on tokenizer, keep it constant for now
-vocab_size = 73
+from ..encoding import get_rotary_matrix
+from ..normalization import RMSnorm
+from ..tokenizers import CharacterTokenizer
 
 
 class roPEAttentionHead(nn.Module):
@@ -68,7 +65,6 @@ class roPEMultiAttentionHead(nn.Module):
 
         self.heads = []
         for i in range(n_heads):
-
             if i % gq_ratio == 0:
                 w_q = nn.Linear(emb_dim, emb_dim)
                 w_k = nn.Linear(emb_dim, emb_dim)
@@ -130,6 +126,7 @@ class Llama(nn.Module):
         n_heads: int,
         n_blocks: int,
         gq_ratio: int = 1,
+        vocab_size: int = CharacterTokenizer().vocab_size,
     ):
         super().__init__()
         self.vocab_size = vocab_size
