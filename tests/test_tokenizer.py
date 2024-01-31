@@ -1,11 +1,17 @@
-import torch
-from tokenizers_ import CharacterTokenizer
+from tinyllama.tokenizers import CharacterTokenizer
 
-string = "I love tennis!"
-tokenizer = CharacterTokenizer(string)
-tok_string = torch.tensor(tokenizer.tokenize(string), dtype=torch.int8)
-untok_string = tokenizer.untokenize(tok_string)
+
+string = "This is a sentence to test CharacterTokenizer"
+
+
+def regenerate_string(string):
+    tokenizer = CharacterTokenizer()
+    tokens = tokenizer.tokenize(string)
+    return tokenizer.untokenize(tokens)
 
 
 def test_tokenizer():
-    assert string == untok_string
+    regenerated_string = regenerate_string(
+        "This is a sentence to test CharacterTokenizer"
+    )
+    assert string == regenerated_string
