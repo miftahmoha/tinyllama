@@ -16,7 +16,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 class roPEAttentionHead(nn.Module):
-    def __init__(self, context_window: int, emb_dim: int, w_q: Tensor, w_k: Tensor):
+    def __init__(
+        self, context_window: int, emb_dim: int, w_q: nn.Linear, w_k: nn.Linear
+    ):
         super().__init__()
         self.emb_dim = emb_dim
         self.embedding = nn.Embedding(context_window, emb_dim)
@@ -34,7 +36,7 @@ class roPEAttentionHead(nn.Module):
 
     def forward(self, x: Tensor, kv_cache: bool, return_attn_weights: bool = False):
         # x = self.embedding(x)
-        B, C, emb_dim = x.shape
+        _, C, _ = x.shape
 
         # computes queries, keys & values
         q = self.w_q(x)
