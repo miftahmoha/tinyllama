@@ -65,9 +65,10 @@ def evaluate_loss(
 class TrainConfig:
     def __init__(self, **kwargs):
         try:
-            self.batch_size = kwargs.pop("batch_size")
-            self.epochs = kwargs.pop("epochs")
-            self.log_interval = kwargs.pop("log_interval", 10)
+            self.batch_size: int = kwargs.pop("batch_size")
+            self.epochs: int = kwargs.pop("epochs")
+            self.lr: float | None = kwargs.pop("lr", None)
+            self.log_interval: int = kwargs.pop("log_interval", 10)
         except KeyError as e:
             print(f"Missing keyword argument {e}=... in TrainConfig")
             raise SystemExit
@@ -96,6 +97,11 @@ class Trainer:
         scheduler=None,
     ) -> list:
         optimizer = torch.optim.Adam(model.parameters())
+
+        # set lr
+        if self.TRAIN_CONFIG["lr"]:
+            for param_group in optimizer.param_groups:
+                param_group["lr"] = self.TRAIN_CONFIG["lr"]
 
         losses = []
         x, y = get_batches(

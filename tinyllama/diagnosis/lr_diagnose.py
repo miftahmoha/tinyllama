@@ -1,13 +1,13 @@
 from copy import deepcopy
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
 from tqdm import tqdm
 
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-
-from ..training import TrainConfig, Trainer
 from ..diagnosis import Diagnose
 from ..models import Llama
+from ..training import TrainConfig, Trainer
 
 
 class LrDiagnose(Diagnose):
@@ -53,5 +53,6 @@ class LrDiagnose(Diagnose):
         plt.xlabel("x")
         plt.ylabel("Loss")
 
-        # plt.ylim(0, 5)
+        plt.legend(legends)
+
         plt.show()
