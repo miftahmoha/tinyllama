@@ -132,7 +132,7 @@ class Llama(nn.Module):
         n_heads: int,
         n_blocks: int,
         gq_ratio: int = 1,
-        vocab_size: int = CharacterTokenizer().vocab_size,
+        vocab_size: int,
     ):
         super().__init__()
         self.vocab_size = vocab_size

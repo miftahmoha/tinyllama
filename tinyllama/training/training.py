@@ -1,10 +1,9 @@
 import numpy as np
 import torch
-from torch import nn, Tensor
+from torch import Tensor
 from tqdm import tqdm
 
 from ..models import Llama
-from ..tokenizers import CharacterTokenizer
 
 
 # set device to gpu
@@ -15,7 +14,6 @@ def get_batches(
     tokens: Tensor,
     context_window: int,
     batch_size: int,
-    eos_token: int,
     split: str = "train",
 ) -> tuple[Tensor, Tensor]:
     """
@@ -32,27 +30,17 @@ def get_batches(
     if split == "test":
         batch_data = test
 
-    ix = torch.randint(0, batch_data.size(0) - context_window - 2, (batch_size,))
+    ix = torch.randint(0, batch_data.size(0) - context_window - 1, (batch_size,))
 
-    x = torch.stack([batch_data[i + 1 : i + context_window + 1] for i in ix])
-    y = torch.stack(
-        [
-            torch.cat(
-                [
-                    batch_data[i + 2 : i + context_window + 1],
-                    torch.tensor([eos_token]).to(device),
-                ]
-            )
-            for i in ix
-        ]
-    )
+    x = torch.stack([batch_data[i : i + context_window] for i in ix])
+    y = torch.stack([batch_data[i + 1 : i + context_window + 1] for i in ix])
 
     return x, y
 
 
 @torch.no_grad()
 def evaluate_loss(
-    model: Llama, tokens: Tensor, context_window: int, batch_size: int, eos_token: int
+    model: Llama, tokens: Tensor, context_window: int, batch_size: int
 ) -> dict[str, float]:
     """
     Return the loss for batches in the train and validation sets.
@@ -65,7 +53,7 @@ def evaluate_loss(
     for split in ["train", "val"]:
         for i in range(10):
             losses = []
-            x, y = get_batches(tokens, context_window, batch_size, eos_token, split)
+            x, y = get_batches(tokens, context_window, batch_size, split)
             _, loss = model(x, y)
             losses += [loss.cpu()]
         out[split] = np.mean(losses)
@@ -96,28 +84,24 @@ class Trainer:
 
     TRAIN_CONFIG: TrainConfig
 
-    def __init__(self, TRAIN_CONFIG: TrainConfig, tokenizer: CharacterTokenizer):
+    def __init__(self, TRAIN_CONFIG: TrainConfig):
         self.TRAIN_CONFIG = TRAIN_CONFIG
-        self.tokenizer = tokenizer
 
     def run(
         self,
         model: Llama,
-        corpus: str,
+        tokens: Tensor,
         show_logs: bool = False,
         hide_progress: bool = False,
         scheduler=None,
     ) -> list:
         optimizer = torch.optim.Adam(model.parameters())
 
-        tokens = self.tokenizer.tokenize(corpus).to(device)
-
         losses = []
         x, y = get_batches(
             tokens,
             model.context_window,
             self.TRAIN_CONFIG.batch_size,
-            self.tokenizer.eos_token,
             split="train",
         )
 
@@ -136,7 +120,6 @@ class Trainer:
                     tokens,
                     model.context_window,
                     self.TRAIN_CONFIG.batch_size,
-                    self.tokenizer.eos_token,
                 )
                 losses += [out]
                 if show_logs:

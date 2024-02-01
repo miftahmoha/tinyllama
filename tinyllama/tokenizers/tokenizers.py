@@ -2,14 +2,13 @@ import torch
 from torch import Tensor
 
 
-class CharacterTokenizer:
-    def __init__(self, eos_char="#"):
-        self.eos_char = eos_char
+# set device to gpu
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-        self.vocab = (
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !?.,:;'\"\nʼ"
-            + eos_char
-        )
+
+class CharacterTokenizer:
+    def __init__(self):
+        self.vocab = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !?.,:;'\"\nʼ"
 
         # encode
         self.encode = {char: tok for tok, char in enumerate(self.vocab)}
@@ -17,7 +16,9 @@ class CharacterTokenizer:
         self.decode = {tok: char for tok, char in enumerate(self.encode)}
 
     def tokenize(self, string: str):
-        return torch.tensor([self.encode[i] for i in string], dtype=torch.long)
+        return torch.tensor([self.encode[i] for i in string], dtype=torch.long).to(
+            device
+        )
 
     def untokenize(self, tokens: Tensor):
         return "".join([self.decode[i] for i in tokens.tolist()])
@@ -25,7 +26,3 @@ class CharacterTokenizer:
     @property
     def vocab_size(self):
         return len(self.vocab)
-
-    @property
-    def eos_token(self):
-        return self.encode[self.eos_char]
