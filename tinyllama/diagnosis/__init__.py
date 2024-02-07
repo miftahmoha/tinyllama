@@ -10,4 +10,4 @@ from .diagnosis import Diagnose
 from .gdratio_diagnose import GdrDiagnose
 from .gradient_diagnose import GradDiagnose
 from .lr_diagnose import LrDiagnose
-from .swiglu_diagnose import SwigluDiagnose
+from .swiglu_diagnose import SwigluDiagnose, SwigluPath

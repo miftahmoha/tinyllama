@@ -24,19 +24,16 @@ class LrDiagnose(Diagnose):
         # create the tensor
         lrs = 10 ** np.linspace(self.start, self.end, self.n_lrs)
 
-        TRAIN_CONFIG.__setattr__("epochs", self.epochs_for_each)
-        Trainer_ = Trainer(TRAIN_CONFIG)
+        TRAIN_CONFIG_copy = deepcopy(TRAIN_CONFIG)
+        TRAIN_CONFIG_copy.__setattr__("epochs", self.epochs_for_each)
+
+        model_clone = deepcopy(model)
 
         for lr in tqdm(lrs, total=self.n_lrs):
-            model_clone = deepcopy(model)
+            TRAIN_CONFIG_copy["lr"] = lr
+            Trainer_copy = Trainer(TRAIN_CONFIG_copy)
 
-            optimizer = torch.optim.Adam(model_clone.parameters())
-
-            for param_group in optimizer.param_groups:
-                param_group["lr"] = lr
-
-            out = Trainer_.run(model, tokens, hide_progress=True)
-
+            out = Trainer_copy.run(model_clone, tokens, hide_progress=True)
             losses += [out]
 
         loss_train = [item[0]["train"] for item in losses]
