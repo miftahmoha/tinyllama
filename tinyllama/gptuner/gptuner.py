@@ -3,11 +3,11 @@ Hyperparameter tuner for tinyllama using Bayesian implementation of a noiseless 
 """
 
 import os
+import sys
 from copy import deepcopy
+from typing import TextIO
 
 import numpy as np
-
-# import matplotlib.pyplot as plt
 import pandas as pd
 import stan
 import torch
@@ -17,6 +17,14 @@ from tqdm import tqdm
 from ..diagnosis import Diagnose
 from ..models import Llama
 from ..training import TrainConfig, Trainer
+
+
+# redirects output streams
+def redirect_streams(stdout: TextIO, stderr: TextIO):
+    streams = (sys.stdout, sys.stderr)
+    sys.stdout = stdout
+    sys.stderr = stderr
+    return streams
 
 
 # reads the STAN model
@@ -44,49 +52,25 @@ def process_results(
     :type X_train: List
     :param X_test: Test samples for noiseless GP
     :type X_test: List
-    :param N_val: Number of evaluation samples
-    :type N_val: Int
     """
 
+    # retrieving results
     df_results = results.to_frame().describe().T
     Y_test_mean = df_results["Y_test.1" : "Y_test." + str(N_val)]["mean"].values
     Y_test_25qtl = df_results["Y_test.1" : "Y_test." + str(N_val)]["25%"].values
     Y_test_75qtl = df_results["Y_test.1" : "Y_test." + str(N_val)]["75%"].values
 
-    # Processing
-    X = np.vstack((X_train, X_test))
-    Y_mean = np.hstack((Y_train, Y_test_mean))
-    Y_25qtl = np.hstack((Y_train, Y_test_25qtl))
-    Y_75qtl = np.hstack((Y_train, Y_test_75qtl))
+    # stacking matrices for X_train & X_test
+    train_matrix = np.column_stack((X_train, Y_train))
+    eval_matrix = np.column_stack((X_test, Y_test_25qtl, Y_test_mean, Y_test_75qtl))
 
-    # Concatenating
-    combined_matrix = np.column_stack((X, Y_25qtl, Y_mean, Y_75qtl))
-
-    dataframe = pd.DataFrame(
-        combined_matrix, columns=hyperparam_to_tune + ["Y_25qtl", "Y_mean", "Y_75qtl"]
+    # creating datafranes for X_train & X_test
+    train_df = pd.DataFrame(train_matrix, columns=hyperparam_to_tune + ["Y_train"])
+    eval_df = pd.DataFrame(
+        eval_matrix, columns=hyperparam_to_tune + ["Y_25qtl", "Y_mean", "Y_75qtl"]
     )
 
-    """
-    # Create 3D surface
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection="3d")
-
-    # needs changes to be able to make smooth plots
-    ax.plot_trisurf(X[:, 0], X[:, 1], Y_mean, color="grey")
-    ax.plot_trisurf(X[:, 0], X[:, 1], Y_25qtl, color="green")
-    ax.plot_trisurf(X[:, 0], X[:, 1], Y_75qtl, color="red")
-
-    ax.scatter(X_train[:, 0], X_train[:, 1], Y_train, c="red", marker="o")
-
-    ax.set_xlabel("Epoches")
-    ax.set_ylabel("Embedding Dimension")
-    ax.set_zlabel("Loss")
-    ax.set_title("3D Surface Plot")
-
-    plt.show()
-    """
-
-    return dataframe
+    return train_df, eval_df
 
 
 class GPTuneConfig:
@@ -188,9 +172,19 @@ class GPTune(Diagnose):
             "X_test": X_test,
             "Y_train": Y_train,
         }
+
         posterior = stan.build(gptuner_stan, data=data)
+
+        # redirects output streams to devnull
+        dev_null = open(os.devnull, "w")
+        stdout, stderr = redirect_streams(dev_null, dev_null)
+
         fit_results = posterior.sample(num_chains=4, num_samples=num_stan_samples)
-        # print(type(posterior), type(fit_results), type(X_train), type(Y_train), type(X_test))
+
+        # redirects them back
+        _, _ = redirect_streams(stdout, stderr)
+        dev_null.close()
+
         results = process_results(
             fit_results,
             X_train,

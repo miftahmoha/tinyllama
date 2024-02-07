@@ -61,7 +61,7 @@ transformed data {
 parameters {
 
   real alpha;
-  real rho;
+  real<lower=0> rho;
 
 }
 
@@ -73,9 +73,9 @@ model {
 
   matrix[N_train, N_train] K;  
   K = sqrtexp_kernel(X_train, alpha, rho);
-  # Y_train ~ multi_normal(mu, K);
+  // Y_train ~ multi_normal(mu, K);
 
-  // cholesky_decompose: when working with small matrices the differences in computational speed between the two approaches will not be noticeable, but for larger matrices (N≳100) the Cholesky decomposition version will be faster.
+  // cholesky_decompose: when working with small matrices, the differences in computational speed between the two approaches will not be noticeable, but for larger matrices (N≳100) the Cholesky decomposition version will be faster.
 
   matrix[N_train, N_train] L_K;
   L_K = cholesky_decompose(K);
