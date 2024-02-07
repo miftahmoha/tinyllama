@@ -67,7 +67,7 @@ class TrainConfig:
         try:
             self.batch_size: int = kwargs.pop("batch_size")
             self.epochs: int = kwargs.pop("epochs")
-            self.lr: float | None = kwargs.pop("lr", None)
+            self.lr: float = kwargs.pop("lr", 1e-3)
             self.log_interval: int = kwargs.pop("log_interval", 10)
         except KeyError as e:
             print(f"Missing keyword argument {e}=... in TrainConfig")
@@ -92,16 +92,16 @@ class Trainer:
         self,
         model: Llama,
         tokens: Tensor,
-        show_logs: bool = False,
+        scheduler: torch.optim.lr_scheduler.LRScheduler = None,
+        optimizer: torch.optim.Optimizer = None,
+        hide_logs: bool = True,
         hide_progress: bool = False,
-        scheduler=None,
     ) -> list:
         optimizer = torch.optim.Adam(model.parameters())
 
         # set lr
-        if self.TRAIN_CONFIG["lr"]:
-            for param_group in optimizer.param_groups:
-                param_group["lr"] = self.TRAIN_CONFIG["lr"]
+        for param_group in optimizer.param_groups:
+            param_group["lr"] = self.TRAIN_CONFIG["lr"]
 
         losses = []
         x, y = get_batches(
@@ -128,7 +128,7 @@ class Trainer:
                     self.TRAIN_CONFIG.batch_size,
                 )
                 losses += [out]
-                if show_logs:
+                if not hide_logs:
                     print(
                         f'Epoch: {epoch} | training loss: {out["train"]} | validation loss: {out["val"]}'
                     )
