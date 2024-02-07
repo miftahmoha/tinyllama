@@ -30,8 +30,8 @@ class roPEAttentionHead(nn.Module):
 
         self.R = get_rotary_matrix(context_window, emb_dim)
         self.cache = {
-            "keys": torch.empty(1, 0, emb_dim).cuda(),
-            "values": torch.empty(1, 0, emb_dim).cuda(),
+            "keys": torch.empty(1, 0, emb_dim, requires_grad=False).to(device),
+            "values": torch.empty(1, 0, emb_dim, requires_grad=False).to(device),
         }
 
     def forward(self, x: Tensor, kv_cache: bool, return_attn_weights: bool = False):
