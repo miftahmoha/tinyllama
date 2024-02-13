@@ -5,6 +5,7 @@ Hyperparameter tuner for tinyllama using Bayesian implementation of a noiseless 
 import os
 import sys
 from copy import deepcopy
+from itertools import islice, product
 from typing import TextIO
 
 import numpy as np
@@ -17,6 +18,40 @@ from tqdm import tqdm
 from ..diagnosis import Diagnose
 from ..models import Llama
 from ..training import TrainConfig, Trainer
+
+
+def generate_matrix(arrays, num_combinations):
+    # generate all possible combinations of elements from the arrays
+    combinations = product(*arrays)
+
+    # create a set to store unique combinations
+    unique_combinations = set()
+
+    # iterate over the combinations and add unique ones to the set
+    for combo in combinations:
+        if len(set(combo)) == len(combo):  # Check for uniqueness
+            unique_combinations.add(combo)
+
+    # convert the set of unique combinations back to a list of lists
+    matrix = [list(combo) for combo in unique_combinations]
+
+    # returns the specific number of combinations
+    matrix = list(islice(matrix, num_combinations))
+
+    return matrix, len(matrix)
+
+
+def generate_integer_samples(lower_bound, upper_bound, max_num_eval_samples):
+    M = len(upper_bound)
+
+    int_params = []
+    for i in range(M):
+        int_param = np.arange(lower_bound[i], upper_bound[i] + 1)
+        int_params += [int_param]
+
+    int_samples, num_eval_samples = generate_matrix(int_params, max_num_eval_samples)
+
+    return np.array(int_samples), num_eval_samples
 
 
 # redirects output streams
@@ -78,7 +113,7 @@ class GPTuneConfig:
     l_bounds: list[int]
     u_bounds: list[int]
     hyperparams_to_tune: list[str]
-    num_evaluations: int
+    max_num_evaluations: int
 
     def __init__(self, **kwargs):
         try:
@@ -86,7 +121,7 @@ class GPTuneConfig:
             self.l_bounds = kwargs.pop("l_bounds")
             self.u_bounds = kwargs.pop("u_bounds")
             self.hyperparams_to_tune = kwargs.pop("hyperparams_to_tune")
-            self.num_evaluations = kwargs.pop("num_evaluations")
+            self.max_num_evaluations = kwargs.pop("max_num_evaluations")
         except KeyError as e:
             print(f"Missing keyword argument {e}=...in GPTuneConfig")
 
@@ -117,9 +152,10 @@ class GPTune(Diagnose):
         sampler = qmc.LatinHypercube(d=M)
         sample = sampler.random(n=N_train)
 
+        # samples should be intergers
         X_train = qmc.scale(
             sample, self.GPTUNE_CONFIG["l_bounds"], self.GPTUNE_CONFIG["u_bounds"]
-        )
+        ).astype(int)
 
         # training & retrieve validation error for each sampled hyperparameter
         Y_train = np.array([])
@@ -135,10 +171,10 @@ class GPTune(Diagnose):
                     "n_heads",
                     "n_blocks",
                 ]:
-                    setattr(model_clone, hyperparam_to_tune, round(hyperparam[index]))
+                    setattr(model_clone, hyperparam_to_tune, hyperparam[index])
 
                 elif hyperparam_to_tune in ["epochs", "batch_size", "log_size"]:
-                    TRAIN_CONFIG[hyperparam_to_tune] = round(hyperparam[index])
+                    TRAIN_CONFIG[hyperparam_to_tune] = hyperparam[index]
 
                 else:
                     raise ValueError(
@@ -154,14 +190,11 @@ class GPTune(Diagnose):
                 ),
             )
 
-        # N_train, M = X_train.shape
+        # generating test samples for hyperparameters
+        N_val = self.GPTUNE_CONFIG["max_num_evaluations"]
 
-        # generating test samples for hyperparameters (going with uniform but could be abstracted)
-        N_val = self.GPTUNE_CONFIG["num_evaluations"]
-        X_test = np.random.uniform(
-            low=self.GPTUNE_CONFIG["l_bounds"],
-            high=self.GPTUNE_CONFIG["u_bounds"],
-            size=(N_val, M),
+        X_test, N_val = generate_integer_samples(
+            self.GPTUNE_CONFIG["l_bounds"], self.GPTUNE_CONFIG["u_bounds"], N_val
         )
 
         data = {
