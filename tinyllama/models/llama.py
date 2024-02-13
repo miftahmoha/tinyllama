@@ -1,3 +1,4 @@
+import math
 from collections import OrderedDict
 
 import numpy as np
@@ -8,11 +9,43 @@ from torch import nn, Tensor
 from ..activations import SwiGLU
 from ..encoding import get_rotary_matrix
 from ..normalization import RMSnorm
-from ..tokenizers import CharacterTokenizer
 
 
 # set device to gpu
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def modified_dot_product_attention(
+    self: nn.Module,
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+    attn_mask=None,
+    dropout_p: float = 0.0,
+    is_causal: bool = False,
+    scale=None,
+) -> Tensor:
+    L, S = query.size(-2), key.size(-2)
+    scale_factor = 1 / math.sqrt(query.size(-1)) if scale is None else scale
+    attn_bias = torch.zeros(L, S, dtype=query.dtype)
+    if is_causal:
+        assert attn_mask is None
+        temp_mask = torch.ones(L, S, dtype=torch.bool).tril(diagonal=0)
+        attn_bias.masked_fill_(temp_mask.logical_not(), float("-inf"))
+        attn_bias.to(query.dtype)
+
+    if attn_mask is not None:
+        if attn_mask.dtype == torch.bool:
+            attn_bias.masked_fill_(attn_mask.logical_not(), float("-inf"))
+        else:
+            attn_bias += attn_mask
+    attn_weight = query @ key.transpose(-2, -1) * scale_factor
+    attn_bias = attn_bias.to(device)
+    attn_weight += attn_bias
+
+    attn_weight = torch.softmax(attn_weight, dim=-1)
+    attn_weight = torch.dropout(attn_weight, dropout_p, train=self.training)
+    return attn_weight @ value
 
 
 class roPEAttentionHead(nn.Module):
@@ -30,12 +63,11 @@ class roPEAttentionHead(nn.Module):
 
         self.R = get_rotary_matrix(context_window, emb_dim)
         self.cache = {
-            "keys": torch.empty(1, 0, emb_dim, requires_grad=False).to(device),
-            "values": torch.empty(1, 0, emb_dim, requires_grad=False).to(device),
+            "k_rot": torch.empty(1, 0, emb_dim, requires_grad=False).to(device),
+            "v": torch.empty(1, 0, emb_dim, requires_grad=False).to(device),
         }
 
     def forward(self, x: Tensor, kv_cache: bool, return_attn_weights: bool = False):
-        # x = self.embedding(x)
         _, C, _ = x.shape
 
         # computes queries, keys & values
@@ -48,13 +80,33 @@ class roPEAttentionHead(nn.Module):
         k_rot = torch.bmm(k.transpose(0, 1), self.R[:C].transpose(1, 2)).transpose(0, 1)
 
         if kv_cache:
-            self.cache["keys"] = torch.cat((self.cache["keys"], k_rot), dim=1)
-            self.cache["values"] = torch.cat((self.cache["values"], v), dim=1)
+            self.cache["k_rot"] = torch.cat((self.cache["k_rot"], k_rot), dim=1)
+            self.cache["v"] = torch.cat((self.cache["v"], v), dim=1)
 
-        activations = F.scaled_dot_product_attention(
-            q_rot, k_rot, v, dropout_p=0.2, is_causal=True
-        )
+            if q_rot.size(1) > 1:
+                activations = modified_dot_product_attention(
+                    self,
+                    q_rot,
+                    self.cache["k_rot"],
+                    self.cache["v"],
+                    dropout_p=0.2,
+                    is_causal=True,
+                )
+            else:
+                activations = modified_dot_product_attention(
+                    self,
+                    q_rot,
+                    self.cache["k_rot"],
+                    self.cache["v"],
+                    dropout_p=0.2,
+                    is_causal=False,
+                )
+        else:
+            activations = modified_dot_product_attention(
+                self, q_rot, k_rot, v, dropout_p=0.2, is_causal=True
+            )
 
+        # shouldn't work with kv_cache, but not needed
         if return_attn_weights:
             attn_weights = torch.bmm(q_rot, k_rot.transpose(-2, -1)) / np.sqrt(
                 self.emb_dim
@@ -136,6 +188,7 @@ class Llama(nn.Module):
     ):
         super().__init__()
         self.vocab_size = vocab_size
+        self.emb_dim = emb_dim
         self.embedding = nn.Embedding(vocab_size, emb_dim)
         self.llama_block_seq = nn.Sequential(
             OrderedDict(
@@ -159,13 +212,10 @@ class Llama(nn.Module):
         self.context_window = context_window
         self.to(device)
 
-    def forward(self, x: Tensor, targets: Tensor = None, kv_cache: bool = False):
+    def forward(self, x: Tensor, targets: Tensor = None, kv_cache: bool = False):  # type: ignore
         x = self.embedding(x)  # (B, C, emb_dim)
-
         x = self.llama_block_seq((x, kv_cache))  # (B, C, emb_dim)
-
         x = self.linear(x[0])  # (B, C, emb_dim)
-
         logits = self.last_linear(x)  # (B, C, vocab_size)
 
         if targets is None:
@@ -174,3 +224,13 @@ class Llama(nn.Module):
         else:
             loss = F.cross_entropy(logits.view(-1, self.vocab_size), targets.view(-1))
             return logits, loss
+
+    def clear_kv_cache(self):
+        for llama_block in self.llama_block_seq:
+            for attention_head in llama_block.multi_attn_head.heads:  # type: ignore
+                attention_head.cache["k_rot"] = torch.empty(
+                    1, 0, self.emb_dim, requires_grad=False
+                ).to(device)
+                attention_head.cache["v"] = torch.empty(
+                    1, 0, self.emb_dim, requires_grad=False
+                ).to(device)
