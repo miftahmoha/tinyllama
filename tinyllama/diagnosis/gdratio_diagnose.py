@@ -21,7 +21,9 @@ class GdrDiagnose(Diagnose):
     def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
         model_clone = deepcopy(model)
 
-        TRAIN_CONFIG["epochs"] = 1
+        TRAIN_CONFIG_copy = deepcopy(TRAIN_CONFIG)
+        TRAIN_CONFIG_copy["epochs"] = 1
+
         Trainer_ = Trainer(TRAIN_CONFIG)
 
         # necessary initial training job, data can't be found from deepcopy otherwise.
