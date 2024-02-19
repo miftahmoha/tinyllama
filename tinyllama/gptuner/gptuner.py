@@ -54,6 +54,17 @@ def generate_integer_samples(lower_bound, upper_bound, max_num_eval_samples):
     return np.array(int_samples), num_eval_samples
 
 
+def make_training_set_unique(X_train: np.ndarray | list | set):
+    # convert inner lists to tuples
+    X_train = [tuple(item) for item in X_train]
+
+    # convert list of tuples to set to remove duplicates
+    X_train = set(X_train)
+
+    # convert set of tuples back to list of lists
+    X_train = [list(item) for item in X_train]
+
+
 # redirects output streams
 def redirect_streams(stdout: TextIO, stderr: TextIO):
     streams = (sys.stdout, sys.stderr)
@@ -109,19 +120,19 @@ def process_results(
 
 
 class GPTuneConfig:
-    num_training_samples: int
+    max_num_training_samples: int
     l_bounds: list[int]
     u_bounds: list[int]
     hyperparams_to_tune: list[str]
-    max_num_evaluations: int
+    max_num_evaluation_samples: int
 
     def __init__(self, **kwargs):
         try:
-            self.num_training_samples = kwargs.pop("num_training_samples")
+            self.max_num_training_samples = kwargs.pop("max_num_training_samples")
             self.l_bounds = kwargs.pop("l_bounds")
             self.u_bounds = kwargs.pop("u_bounds")
             self.hyperparams_to_tune = kwargs.pop("hyperparams_to_tune")
-            self.max_num_evaluations = kwargs.pop("max_num_evaluations")
+            self.max_num_evaluation_samples = kwargs.pop("max_num_evaluation_samples")
         except KeyError as e:
             print(f"Missing keyword argument {e}=...in GPTuneConfig")
 
@@ -144,7 +155,7 @@ class GPTune(Diagnose):
         num_stan_samples: int = 50,
     ):
         N_train, M = (
-            self.GPTUNE_CONFIG["num_training_samples"],
+            self.GPTUNE_CONFIG["max_num_training_samples"],
             len(self.GPTUNE_CONFIG["hyperparams_to_tune"]),
         )
 
@@ -156,6 +167,9 @@ class GPTune(Diagnose):
         X_train = qmc.scale(
             sample, self.GPTUNE_CONFIG["l_bounds"], self.GPTUNE_CONFIG["u_bounds"]
         ).astype(int)
+
+        # removing duplicates (causes covariance matrix to not be positive definite)
+        make_training_set_unique(X_train)
 
         # training & retrieve validation error for each sampled hyperparameter
         Y_train = np.array([])
@@ -191,7 +205,7 @@ class GPTune(Diagnose):
             )
 
         # generating test samples for hyperparameters
-        N_val = self.GPTUNE_CONFIG["max_num_evaluations"]
+        N_val = self.GPTUNE_CONFIG["max_num_evaluation_samples"]
 
         X_test, N_val = generate_integer_samples(
             self.GPTUNE_CONFIG["l_bounds"], self.GPTUNE_CONFIG["u_bounds"], N_val
