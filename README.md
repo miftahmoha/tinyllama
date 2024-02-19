@@ -15,6 +15,32 @@ _Model classes and pre-training utilities for a tiny version of Llama in PyTorch
 pip install tinyllama
 ```
 
+## Parsing 📜
+
+Parses single or multiple files.
+
+```python
+# ".txt" files
+from tinyllama.readers import get_text
+corpus = get_text("./txt_path")
+
+# ".pdf" files
+from tinyllama.readers import get_pdf_text
+corpus = get_pdf_text("./pdf_path")
+```
+
+To parse multiple files:
+
+```python
+# ".txt" files
+from tinyllama.readers import get_text
+corpus = ''.join(get_text(pdf_path) for txt_path in txt_paths)
+
+# ".pdf" files
+from tinyllama.readers import get_pdf_text
+corpus = ''.join(get_pdf_text(pdf_path) for pdf_path in pdf_paths)
+```
+
 ## Pre-training a model 🏋‍♀
 
 ### Initializing a tokenizer
@@ -24,8 +50,6 @@ With a simple character-level tokenizer:
 ```python
 from tinyllama.tokenizers import CharacterTokenizer
 tokenizer = CharacterTokenizer()
-# '|' is the default eos_token
-tokenizer.add_eos_tokens()
 ```
 
 To turn a corpus into tokens:
@@ -38,13 +62,13 @@ tokens  = tokenizer.tokenize(corpus)
 
 ```python
 from tinyllama import Llama
-model = Llama(context_window=500, emb_dim=10, n_heads=2, n_blocks=2)
+model = Llama(context_window=500, emb_dim=10, n_heads=2, n_blocks=2, vocab_size=tokenizer.vocab_size)
 ```
 
 #### Multi-Query attention
 
 ```python
-model = Llama(context_window=500, emb_dim=10, n_heads=2, n_blocks=2, gq_ratio=2)
+model = Llama(context_window=500, emb_dim=10, n_heads=2, n_blocks=2, gq_ratio=2, vocab_size=tokenizer.vocab_size)
 ```
 
 The parameter gq_ratio represents the ratio $\frac{number \ of \ heads}{number \  of \ queries/keys}$, it is set to 1 by default.
@@ -55,7 +79,7 @@ The configuration above builds a Llama model with the number of heads being twic
 
 ```python
 from tinyllama import TrainConfig, Trainer
-TrainConfig = TrainConfig(batch_size=32, epochs=50, log_interval=15)
+TrainConfig = TrainConfig(batch_size=32, epochs=50, lr=1e-3, log_interval=15)
 Trainer = Trainer(TrainConfig)
 Trainer.run(model, tokens)
 ```
@@ -69,7 +93,7 @@ Diagnosis class run a training job on a copy of the model and returns training i
 Returns a plot representing the loss for each learning rate, _the scale for the argument start and end is logarithmic_.
 
 ```python
-from tinyllama.diagnosis import LrDiagnose                                                                                                                                                                                                       LrDiagnose = LrDiagnose(start=-5, end=0, n_lrs=50)                                                                   # LrDiagnose.run(model, tokens, TrainConfig)
+from tinyllama.diagnosis import LrDiagnose                                                                                                         
 LrDiagnose = LrDiagnose(start=-5, end=0, n_lrs=50)
 LrDiagnose.run(model, tokens, TrainConfig)
 ```
@@ -89,8 +113,11 @@ GradDiagnose.run(model)
 Returns a histogram representing the distribution of the activation layers.
 
 ```python
-from tinyllama.diagnosis import SwigluDiagnose
-SwigluDiagnose = SwigluDiagnose(num_embeddings_for_histogram=50, track_direction="forward" )
+from tinyllama.diagnosis import SwigluDiagnose, SwigluPath
+# forward activations
+SwigluDiagnose = SwigluDiagnose(track_direction=SwigluPath.FORWARD)
+# backward activations (gradients)
+SwigluDiagnose = SwigluDiagnose(track_direction=SwigluPath.BACKWARD)
 SwigluDiagnose.run(model, tokens, TrainConfig)
 ```
 
@@ -123,30 +150,4 @@ Generates a response to a prompt.
 from tinyllama import generate
 # kv_cache is set to True by default.
 generate(model, prompt, max_tokens=900, kv_cache=True)
-```
-
-## Parsing 📜
-
-Parses single or multiple files.
-
-```python
-# ".txt" files
-from tinyllama.readers import get_text
-corpus = get_text("./txt_path")
-
-# ".pdf" files
-from tinyllama.readers import get_pdf_text
-corpus = get_pdf_text("./pdf_path")
-```
-
-To parse multiple files:
-
-```python
-# ".txt" files
-from tinyllama.readers import get_text
-corpus = ''.join(get_text(pdf_path) for txt_path in txt_paths)
-
-# ".pdf" files
-from tinyllama.readers import get_pdf_text
-corpus = ''.join(get_pdf_text(pdf_path) for pdf_path in pdf_paths)
 ```
