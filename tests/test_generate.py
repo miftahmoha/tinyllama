@@ -2,9 +2,9 @@ from copy import deepcopy
 
 import pytest
 import torch
+
 from tinyllama import Llama
 from tinyllama.tokenizers import CharacterTokenizer
-
 
 # set device to gpu
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

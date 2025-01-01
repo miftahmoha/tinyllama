@@ -1,6 +1,5 @@
 from tinyllama.tokenizers import CharacterTokenizer
 
-
 string = "This is a sentence to test CharacterTokenizer"
 
 tokenizer = CharacterTokenizer()

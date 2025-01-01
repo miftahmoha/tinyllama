@@ -5,12 +5,10 @@ from torch import nn
 class SwiGLU(nn.Module):
     def __init__(self, size):
         super().__init__()
-        # self.config = config
         self.linear_gate = nn.Linear(size, size)
         self.linear = nn.Linear(size, size)
-        # self.beta = torch.randn(1, requires_grad=True)
-
         self.beta = nn.Parameter(torch.ones(1))
+        # self.beta = torch.randn(1, requires_grad=True)
         # self.register_parameter("beta", self.beta)
 
     def forward(self, x):

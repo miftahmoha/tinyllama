@@ -1,3 +1,3 @@
-__all__ = ["llama"]
+__all__ = ["Llama"]
 
 from .llama import Llama

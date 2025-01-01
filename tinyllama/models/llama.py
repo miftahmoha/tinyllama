@@ -1,18 +1,16 @@
 import math
 from collections import OrderedDict
+from copy import deepcopy
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import nn, Tensor
+from torch import Tensor, nn
 
-from ..activations import SwiGLU
-from ..encoding import get_rotary_matrix
-from ..normalization import RMSnorm
-
-
-# set device to gpu
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from tinyllama.activations import SwiGLU
+from tinyllama.encoding import get_rotary_matrix
+from tinyllama.globals import DEVICE
+from tinyllama.normalization import RMSnorm
 
 
 def modified_dot_product_attention(
@@ -40,7 +38,7 @@ def modified_dot_product_attention(
         else:
             attn_bias += attn_mask
     attn_weight = query @ key.transpose(-2, -1) * scale_factor
-    attn_bias = attn_bias.to(device)
+    attn_bias = attn_bias.to(DEVICE)
     attn_weight += attn_bias
 
     attn_weight = torch.softmax(attn_weight, dim=-1)
@@ -63,8 +61,8 @@ class roPEAttentionHead(nn.Module):
 
         self.R = get_rotary_matrix(context_window, emb_dim)
         self.cache = {
-            "k_rot": torch.empty(1, 0, emb_dim, requires_grad=False).to(device),
-            "v": torch.empty(1, 0, emb_dim, requires_grad=False).to(device),
+            "k_rot": torch.empty(1, 0, emb_dim, requires_grad=False).to(DEVICE),
+            "v": torch.empty(1, 0, emb_dim, requires_grad=False).to(DEVICE),
         }
 
     def forward(self, x: Tensor, kv_cache: bool, return_attn_weights: bool = False):
@@ -210,7 +208,7 @@ class Llama(nn.Module):
         self.last_linear = nn.Linear(emb_dim, vocab_size)
         print(f"Parameters: \n {sum([m.numel() for m in self.parameters()])}")
         self.context_window = context_window
-        self.to(device)
+        self.to(DEVICE)
 
     def forward(self, x: Tensor, targets: Tensor = None, kv_cache: bool = False):  # type: ignore
         x = self.embedding(x)  # (B, C, emb_dim)
@@ -230,7 +228,10 @@ class Llama(nn.Module):
             for attention_head in llama_block.multi_attn_head.heads:  # type: ignore
                 attention_head.cache["k_rot"] = torch.empty(
                     1, 0, self.emb_dim, requires_grad=False
-                ).to(device)
+                ).to(DEVICE)
                 attention_head.cache["v"] = torch.empty(
                     1, 0, self.emb_dim, requires_grad=False
-                ).to(device)
+                ).to(DEVICE)
+
+    def clone(self):
+        return deepcopy(self)

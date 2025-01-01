@@ -1,12 +1,12 @@
+from typing import Tuple
+
 import torch
 from torch import nn
-
-from typing import Tuple
 
 
 class RMSnorm(nn.Module):
     def __init__(self, layer_shape: Tuple, eps=1e-8, bias: bool = False):
-        super(RMSnorm, self).__init__()
+        super().__init__()
         self.scale = nn.Parameter(torch.ones(layer_shape))
 
     def forward(self, x: torch.Tensor):

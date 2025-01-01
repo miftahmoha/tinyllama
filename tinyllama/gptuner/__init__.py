@@ -1,3 +1,3 @@
-__all__ = ["gptuner"]
+__all__ = ["GPTune", "GPTuneConfig"]
 
 from .gptuner import GPTune, GPTuneConfig

@@ -1,14 +1,13 @@
-import torch
 import numpy as np
+import torch
 
-# set device to gpu
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from tinyllama.globals import DEVICE
 
 
 def get_rotary_matrix(context_window, embedding_dim):
     R = torch.zeros(
         (context_window, embedding_dim, embedding_dim), requires_grad=False
-    ).to(device)
+    ).to(DEVICE)
     for position in range(context_window):
         for i in range(embedding_dim // 2):
             theta = 10000.0 ** (-2.0 * (i - 1) / embedding_dim)

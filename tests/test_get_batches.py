@@ -1,7 +1,7 @@
 import pytest
 import torch
-from tinyllama.training import get_batches
 
+from tinyllama.training import get_batches
 
 # set device to gpu
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
