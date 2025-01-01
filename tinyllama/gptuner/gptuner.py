@@ -4,38 +4,34 @@ Hyperparameter tuner for tinyllama using Bayesian implementation of a noiseless 
 
 import os
 import sys
-from copy import deepcopy
 from itertools import islice, product
 from typing import TextIO
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import stan
 import torch
-from scipy.stats import qmc
+from scipy import interpolate, stats
 from tqdm import tqdm
 
-from ..diagnosis import Diagnose
-from ..models import Llama
-from ..training import TrainConfig, Trainer
+from tinyllama.insight import Insight
+from tinyllama.models import Llama
+from tinyllama.training import TrainConfig, Trainer
 
 
-def generate_matrix(arrays, num_combinations):
+def generate_combination_matrix(arrays, num_combinations):
     # generate all possible combinations of elements from the arrays
     combinations = product(*arrays)
 
-    # create a set to store unique combinations
     unique_combinations = set()
 
-    # iterate over the combinations and add unique ones to the set
     for combo in combinations:
-        if len(set(combo)) == len(combo):  # Check for uniqueness
+        if len(set(combo)) == len(combo):  # check for uniqueness
             unique_combinations.add(combo)
 
-    # convert the set of unique combinations back to a list of lists
     matrix = [list(combo) for combo in unique_combinations]
 
-    # returns the specific number of combinations
     matrix = list(islice(matrix, num_combinations))
 
     return matrix, len(matrix)
@@ -49,20 +45,15 @@ def generate_integer_samples(lower_bound, upper_bound, max_num_eval_samples):
         int_param = np.arange(lower_bound[i], upper_bound[i] + 1)
         int_params += [int_param]
 
-    int_samples, num_eval_samples = generate_matrix(int_params, max_num_eval_samples)
+    int_samples, num_eval_samples = generate_combination_matrix(
+        int_params, max_num_eval_samples
+    )
 
     return np.array(int_samples), num_eval_samples
 
 
 def make_training_set_unique(X_train: np.ndarray | list | set):
-    # convert inner lists to tuples
-    X_train = [tuple(item) for item in X_train]
-
-    # convert list of tuples to set to remove duplicates
-    X_train = set(X_train)
-
-    # convert set of tuples back to list of lists
-    X_train = [list(item) for item in X_train]
+    X_train = [list(item) for item in {tuple(item) for item in X_train}]
 
 
 # redirects output streams
@@ -75,7 +66,7 @@ def redirect_streams(stdout: TextIO, stderr: TextIO):
 
 # reads the STAN model
 script_directory = os.path.dirname(os.path.realpath(__file__))
-with open(script_directory + "/gptuner.stan", "r") as file:
+with open(script_directory + "/gptuner.stan") as file:
     gptuner_stan = file.read()
 
 
@@ -102,13 +93,13 @@ def process_results(
 
     # retrieving results
     df_results = results.to_frame().describe().T
-    Y_test_mean = df_results["Y_test.1" : "Y_test." + str(N_val)]["mean"].values
-    Y_test_25qtl = df_results["Y_test.1" : "Y_test." + str(N_val)]["25%"].values
-    Y_test_75qtl = df_results["Y_test.1" : "Y_test." + str(N_val)]["75%"].values
+    Y_test_25qt = df_results.loc["Y_test.1" : "Y_test." + str(N_val)]["25%"].values  # type: ignore
+    Y_test_mean = df_results.loc["Y_test.1" : "Y_test." + str(N_val)]["mean"].values  # type: ignore
+    Y_test_75qt = df_results.loc["Y_test.1" : "Y_test." + str(N_val)]["75%"].values  # type: ignore
 
     # stacking matrices for X_train & X_test
     train_matrix = np.column_stack((X_train, Y_train))
-    eval_matrix = np.column_stack((X_test, Y_test_25qtl, Y_test_mean, Y_test_75qtl))
+    eval_matrix = np.column_stack((X_test, Y_test_25qt, Y_test_mean, Y_test_75qt))
 
     # creating datafranes for X_train & X_test
     train_df = pd.DataFrame(train_matrix, columns=hyperparam_to_tune + ["Y_train"])
@@ -116,7 +107,65 @@ def process_results(
         eval_matrix, columns=hyperparam_to_tune + ["Y_25qtl", "Y_mean", "Y_75qtl"]
     )
 
+    # 3D plot
+    plot_results(X_train, Y_train, X_test, Y_test_25qt, Y_test_mean, Y_test_75qt)
+
     return train_df, eval_df
+
+
+def plot_results(X_train, Y_train, X_test, Y_test_25qtl, Y_test_mean, Y_test_75qtl):
+    # create grid for the surface
+    grid_x, grid_y = np.mgrid[
+        min(X_test[:, 0]) : max(X_test[:, 0]) : 100j,
+        min(X_test[:, 1]) : max(X_test[:, 1]) : 100j,
+    ]
+
+    # interpolate the data onto the grid
+    grid_z_25qt = interpolate.griddata(
+        (X_test[:, 0], X_test[:, 1]), Y_test_25qtl, (grid_x, grid_y), method="cubic"
+    )
+    grid_z_mean = interpolate.griddata(
+        (X_test[:, 0], X_test[:, 1]), Y_test_mean, (grid_x, grid_y), method="cubic"
+    )
+    grid_z_75qt = interpolate.griddata(
+        (X_test[:, 0], X_test[:, 1]), Y_test_75qtl, (grid_x, grid_y), method="cubic"
+    )
+
+    # create 3d surface
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+
+    # plot surfaces
+    ax.plot_surface(
+        grid_x, grid_y, grid_z_25qt, alpha=0.4, color="green", label="25th Percentile"
+    )
+    ax.plot_surface(grid_x, grid_y, grid_z_mean, alpha=0.6, color="red", label="Mean")
+    ax.plot_surface(
+        grid_x, grid_y, grid_z_75qt, alpha=0.4, color="yellow", label="75th Percentile"
+    )
+
+    # scatter plot of training data
+    ax.scatter(
+        X_train[:, 0],
+        X_train[:, 1],
+        Y_train,
+        c="orange",
+        marker="o",
+        label="Training Data",
+    )
+
+    # [TODO] need to figure out why parameters such as embedding dimensions, the number of heads.. are not set
+    # [TODO] need to set correct labels
+    # [TODO] need to deal with `nan` values
+    # [TODO] need to explain the meaning of color contrast relative to uncertainty
+    ax.set_xlabel("Epoches")
+    ax.set_ylabel("Embedding Dimension")
+    ax.set_zlabel("Loss")
+    ax.set_title("3D Surface Plot")
+
+    ax.legend()
+
+    plt.show()
 
 
 class GPTuneConfig:
@@ -143,7 +192,7 @@ class GPTuneConfig:
         self.__setattr__(name, value)
 
 
-class GPTune(Diagnose):
+class GPTune(Insight):
     def __init__(self, GPTUNE_CONFIG: GPTuneConfig):
         self.GPTUNE_CONFIG = GPTUNE_CONFIG
 
@@ -160,11 +209,11 @@ class GPTune(Diagnose):
         )
 
         # get latin hypercube distributed samples for hyperparameters
-        sampler = qmc.LatinHypercube(d=M)
+        sampler = stats.qmc.LatinHypercube(d=M)
         sample = sampler.random(n=N_train)
 
         # samples should be intergers
-        X_train = qmc.scale(
+        X_train = stats.qmc.scale(
             sample, self.GPTUNE_CONFIG["l_bounds"], self.GPTUNE_CONFIG["u_bounds"]
         ).astype(int)
 
@@ -174,20 +223,18 @@ class GPTune(Diagnose):
         # training & retrieve validation error for each sampled hyperparameter
         Y_train = np.array([])
         for hyperparam in tqdm(X_train, total=N_train, colour="blue"):
-            model_clone = deepcopy(model)
+            model_clone = model.clone()
 
             for index, hyperparam_to_tune in enumerate(
                 self.GPTUNE_CONFIG["hyperparams_to_tune"]
             ):
                 if hyperparam_to_tune in [
+                    "epochs",
+                    "batch_size",
+                    "lr",
                     "context_window",
-                    "emb_dim",
-                    "n_heads",
-                    "n_blocks",
+                    "log_size",
                 ]:
-                    setattr(model_clone, hyperparam_to_tune, hyperparam[index])
-
-                elif hyperparam_to_tune in ["epochs", "batch_size", "log_size"]:
                     TRAIN_CONFIG[hyperparam_to_tune] = hyperparam[index]
 
                 else:
@@ -195,13 +242,10 @@ class GPTune(Diagnose):
                         f"The parameter {hyperparam_to_tune} is inexistant"
                     )
 
+            # [TODO] cache `DISABLE_TQDM`, then disable run
             Y_train = np.append(
                 Y_train,
-                float(
-                    Trainer(TRAIN_CONFIG).run(model_clone, tokens, hide_progress=True)[
-                        -1
-                    ]["train"]
-                ),
+                float(Trainer(TRAIN_CONFIG).run(model_clone, tokens)[-1]["train"]),
             )
 
         # generating test samples for hyperparameters
