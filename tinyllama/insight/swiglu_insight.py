@@ -1,13 +1,12 @@
-from copy import deepcopy
 from enum import Enum
 
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 
-from ..diagnosis import Diagnose
-from ..models import Llama
-from ..training import TrainConfig, Trainer
+from tinyllama.insight import Insight
+from tinyllama.models import Llama
+from tinyllama.training import TrainConfig, Trainer
 
 
 class SwigluPath(Enum):
@@ -56,12 +55,12 @@ def compute_saturation(layer_name: str, precision: float = 1e-4):
     return num_close_to_zero / total_elements
 
 
-class SwigluDiagnose(Diagnose):
+class SwigluInsight(Insight):
     def __init__(self, *, track_direction: SwigluPath):
         self.track_direction = track_direction
 
     def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
-        model_clone = deepcopy(model)
+        model_clone = model.clone()
 
         # hooking activations layers
         if self.track_direction == SwigluPath.FORWARD:
@@ -99,7 +98,8 @@ class SwigluDiagnose(Diagnose):
 
         # train the model
         Trainer_ = Trainer(TRAIN_CONFIG)
-        Trainer_.run(model_clone, tokens, hide_progress=True)
+        # [TODO] cache `DISABLE_TQDM`, then disable run
+        Trainer_.run(model_clone, tokens)
 
         # computing saturations for swiglu layers
         if self.track_direction == SwigluPath.BACKWARD:

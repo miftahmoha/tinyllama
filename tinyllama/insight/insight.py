@@ -1,13 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Any
 
 from torch import Tensor
 
-from ..models import Llama
-from ..training import TrainConfig
+from tinyllama.models import Llama
+from tinyllama.training import TrainConfig
 
 
-class Diagnose(ABC):
+class Insight(ABC):
     @abstractmethod
     def __init__(self, **kwargs):
         raise NotImplementedError

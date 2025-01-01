@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
 
-from ..models import Llama
+from tinyllama.models import Llama
 
 
-class GradDiagnose:
+class GradInsight:
     def __init__(self, *, num_params_to_track: int, show_params_name: bool = False):
         self.num_params_to_track = num_params_to_track
         self.show_params_name = show_params_name
@@ -17,7 +17,7 @@ class GradDiagnose:
             enumerate(model.named_parameters()), total=self.num_params_to_track
         ):
             if elem[1].grad is not None:
-                # Access the gradients for the parameter
+                # access the gradients for the parameter
                 gradients = elem[1].grad
 
                 hy, hx = torch.histogram(gradients.cpu(), density=True)

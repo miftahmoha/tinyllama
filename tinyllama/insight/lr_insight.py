@@ -1,16 +1,14 @@
-from copy import deepcopy
-
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from tqdm import tqdm
 
-from ..diagnosis import Diagnose
-from ..models import Llama
-from ..training import TrainConfig, Trainer
+from tinyllama.insight import Insight
+from tinyllama.models import Llama
+from tinyllama.training import TrainConfig, Trainer
 
 
-class LrDiagnose(Diagnose):
+class LrInsight(Insight):
     def __init__(self, *, start: int, end: int, n_lrs: int):
         self.start = start
         self.end = end
@@ -24,16 +22,16 @@ class LrDiagnose(Diagnose):
         # create the tensor
         lrs = 10 ** np.linspace(self.start, self.end, self.n_lrs)
 
-        TRAIN_CONFIG_copy = deepcopy(TRAIN_CONFIG)
+        TRAIN_CONFIG_copy = TRAIN_CONFIG.clone()
         TRAIN_CONFIG_copy.__setattr__("epochs", self.epochs_for_each)
 
-        model_clone = deepcopy(model)
+        model_clone = model.clone()
 
         for lr in tqdm(lrs, total=self.n_lrs):
             TRAIN_CONFIG_copy["lr"] = lr
-            Trainer_copy = Trainer(TRAIN_CONFIG_copy)
-
-            out = Trainer_copy.run(model_clone, tokens, hide_progress=True)
+            Trainer_ = Trainer(TRAIN_CONFIG_copy)
+            # [TODO] cache `DISABLE_TQDM`, then disable run
+            out = Trainer_.run(model_clone, tokens)
             losses += [out]
 
         loss_train = [item[0]["train"] for item in losses]

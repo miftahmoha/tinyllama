@@ -1,33 +1,25 @@
 from collections import defaultdict
-from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
 
-from ..diagnosis import Diagnose
-from ..models import Llama
-from ..training import TrainConfig, Trainer
+from tinyllama.insight import Insight
+from tinyllama.models import Llama
+from tinyllama.training import TrainConfig, Trainer
 
 
-class GdrDiagnose(Diagnose):
-    def __init__(
-        self, *, num_iters: int, num_params_to_track: int, hide_legend: bool = True
-    ):
+class GdrInsight(Insight):
+    def __init__(self, *, num_iters: int, num_params_to_track: int):
         self.num_iters = num_iters
         self.num_params_to_track = num_params_to_track
-        self.hide_legend = hide_legend
 
     def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
-        model_clone = deepcopy(model)
-
-        TRAIN_CONFIG_copy = deepcopy(TRAIN_CONFIG)
-        TRAIN_CONFIG_copy["epochs"] = 1
+        model_clone = model.clone()
 
         Trainer_ = Trainer(TRAIN_CONFIG)
-
-        # necessary initial training job, data can't be found from deepcopy otherwise.
-        Trainer_.run(model_clone, tokens, hide_progress=True)
+        # necessary initial training job, data can't be found from deepcopy otherwise
+        Trainer_.run(model_clone, tokens)
 
         gd_records = defaultdict(list)
         for _ in tqdm(range(self.num_iters), colour="green"):
@@ -38,7 +30,8 @@ class GdrDiagnose(Diagnose):
                 if count > self.num_params_to_track:
                     break
 
-            Trainer_.run(model_clone, tokens, hide_progress=True)
+            # [TODO] cache `DISABLE_TQDM`, then disable run
+            Trainer_.run(model_clone, tokens)
 
             # compute gdratio (lr*grad)/data for each param after training
             for count, elem in enumerate(model_clone.named_parameters()):
@@ -58,6 +51,5 @@ class GdrDiagnose(Diagnose):
 
         # recommended threshold
         plt.axhline(y=1e-3, color="r", linestyle="--")
-
         plt.title("Gradient/Data ratio across multiple runs")
         plt.show()
