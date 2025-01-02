@@ -14,32 +14,38 @@ class GdrInsight(Insight):
         self.num_iters = num_iters
         self.num_params_to_track = num_params_to_track
 
-    def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
-        model_clone = model.clone()
+    def run(
+        self,
+        model: Llama,
+        tokens: torch.Tensor,
+        TUNE_CONFIG: TrainConfig = TrainConfig(batch_size=32, epochs=64),
+        tune_on_clone: bool = False,
+    ):
+        model_ = model.clone() if tune_on_clone else model
 
-        Trainer_ = Trainer(TRAIN_CONFIG)
+        Trainer_ = Trainer(TUNE_CONFIG)
         # necessary initial training job, data can't be found from deepcopy otherwise
-        Trainer_.run(model_clone, tokens)
+        Trainer_.run(model_, tokens)
 
         gd_records = defaultdict(list)
         for _ in tqdm(range(self.num_iters), colour="green"):
             # retrieve data for each param before training
-            for count, elem in enumerate(model_clone.named_parameters()):
+            for count, elem in enumerate(model_.named_parameters()):
                 if elem[1].grad is not None:
                     gd_records[elem[0]].append(1 / elem[1].detach().cpu().std())
                 if count > self.num_params_to_track:
                     break
 
             # [TODO] cache `DISABLE_TQDM`, then disable run
-            Trainer_.run(model_clone, tokens)
+            Trainer_.run(model_, tokens)
 
-            # compute gdratio (lr*grad)/data for each param after training
-            for count, elem in enumerate(model_clone.named_parameters()):
+            # compute (lr*grad)/data for each param after training
+            for count, elem in enumerate(model_.named_parameters()):
                 if elem[1].grad is not None:
                     gd_records[elem[0]][-1] = (
                         gd_records[elem[0]][-1]
                         * elem[1].grad.detach().cpu().std()
-                        * TRAIN_CONFIG["lr"]
+                        * TUNE_CONFIG["lr"]
                     )
                 if count > self.num_params_to_track:
                     break
@@ -51,5 +57,5 @@ class GdrInsight(Insight):
 
         # recommended threshold
         plt.axhline(y=1e-3, color="r", linestyle="--")
-        plt.title("Gradient/Data ratio across multiple runs")
+        plt.title("Gradient over data ratio across multiple runs")
         plt.show()

@@ -15,23 +15,29 @@ class LrInsight(Insight):
         self.n_lrs = n_lrs
         self.epochs_for_each = 1
 
-    def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
+    def run(
+        self,
+        model: Llama,
+        tokens: torch.Tensor,
+        TUNE_CONFIG: TrainConfig = TrainConfig(batch_size=32, epochs=64),
+        tune_on_clone: bool = True,
+    ):
         losses = []
         legends = []
 
         # create the tensor
         lrs = 10 ** np.linspace(self.start, self.end, self.n_lrs)
 
-        TRAIN_CONFIG_copy = TRAIN_CONFIG.clone()
-        TRAIN_CONFIG_copy.__setattr__("epochs", self.epochs_for_each)
+        TUNE_CONFIG_ = TUNE_CONFIG.clone()
+        TUNE_CONFIG_.__setattr__("epochs", self.epochs_for_each)
 
-        model_clone = model.clone()
+        model_ = model.clone() if tune_on_clone else model
 
         for lr in tqdm(lrs, total=self.n_lrs):
-            TRAIN_CONFIG_copy["lr"] = lr
-            Trainer_ = Trainer(TRAIN_CONFIG_copy)
+            TUNE_CONFIG_["lr"] = lr
+            Trainer_ = Trainer(TUNE_CONFIG_)
             # [TODO] cache `DISABLE_TQDM`, then disable run
-            out = Trainer_.run(model_clone, tokens)
+            out = Trainer_.run(model_, tokens)
             losses += [out]
 
         loss_train = [item[0]["train"] for item in losses]

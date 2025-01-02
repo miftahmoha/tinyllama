@@ -90,7 +90,9 @@ class Trainer:
 
     TRAIN_CONFIG: TrainConfig
 
-    def __init__(self, TRAIN_CONFIG: TrainConfig):
+    def __init__(
+        self, TRAIN_CONFIG: TrainConfig = TrainConfig(batch_size=32, epochs=512)
+    ):
         self.TRAIN_CONFIG = TRAIN_CONFIG
 
     def run(
@@ -99,14 +101,14 @@ class Trainer:
         tokens: Tensor,
         scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
-    ) -> list:
+    ) -> list[dict[str, float]]:
         optimizer = torch.optim.Adam(model.parameters())
 
         # set learning rate
         for param_group in optimizer.param_groups:
             param_group["lr"] = self.TRAIN_CONFIG["lr"]
 
-        # Set context window.
+        # set context window
         self.TRAIN_CONFIG["context_window"] = (
             model.context_window
             if self.TRAIN_CONFIG["context_window"] is None

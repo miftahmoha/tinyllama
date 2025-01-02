@@ -59,37 +59,43 @@ class SwigluInsight(Insight):
     def __init__(self, *, track_direction: SwigluPath):
         self.track_direction = track_direction
 
-    def run(self, model: Llama, tokens: torch.Tensor, TRAIN_CONFIG: TrainConfig):
-        model_clone = model.clone()
+    def run(
+        self,
+        model: Llama,
+        tokens: torch.Tensor,
+        TUNE_CONFIG: TrainConfig = TrainConfig(batch_size=32, epochs=64),
+        tune_on_clone: bool = False,
+    ):
+        model_ = model.clone() if tune_on_clone else model
 
         # hooking activations layers
         if self.track_direction == SwigluPath.FORWARD:
             hook_activ_swiglu_0 = register_layer(
-                model_clone.llama_block_seq.llama_0.linear[1],
+                model_.llama_block_seq.llama_0.linear[1],
                 "SwiGLU: Layer 0",
                 SwigluPath.FORWARD,
             )
             hook_activ_swiglu_1 = register_layer(
-                model_clone.llama_block_seq.llama_1.linear[1],
+                model_.llama_block_seq.llama_1.linear[1],
                 "SwiGLU: Layer 1",
                 SwigluPath.FORWARD,
             )
             hook_activ_swiglu_2 = register_layer(
-                model_clone.linear[1], "SwiGLU: Layer 2", SwigluPath.FORWARD
+                model_.linear[1], "SwiGLU: Layer 2", SwigluPath.FORWARD
             )
         elif self.track_direction == SwigluPath.BACKWARD:
             hook_activ_swiglu_0 = register_layer(
-                model_clone.llama_block_seq.llama_0.linear[1],
+                model_.llama_block_seq.llama_0.linear[1],
                 "SwiGLU: Layer 0",
                 SwigluPath.BACKWARD,
             )
             hook_activ_swiglu_1 = register_layer(
-                model_clone.llama_block_seq.llama_1.linear[1],
+                model_.llama_block_seq.llama_1.linear[1],
                 "SwiGLU: Layer 1",
                 SwigluPath.BACKWARD,
             )
             hook_activ_swiglu_2 = register_layer(
-                model_clone.linear[1], "SwiGLU: Layer 2", SwigluPath.BACKWARD
+                model_.linear[1], "SwiGLU: Layer 2", SwigluPath.BACKWARD
             )
         else:
             raise TypeError(
@@ -97,9 +103,9 @@ class SwigluInsight(Insight):
             )
 
         # train the model
-        Trainer_ = Trainer(TRAIN_CONFIG)
+        Trainer_ = Trainer(TUNE_CONFIG)
         # [TODO] cache `DISABLE_TQDM`, then disable run
-        Trainer_.run(model_clone, tokens)
+        Trainer_.run(model_, tokens)
 
         # computing saturations for swiglu layers
         if self.track_direction == SwigluPath.BACKWARD:

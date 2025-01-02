@@ -184,6 +184,7 @@ class GPTuneConfig:
             self.max_num_evaluation_samples = kwargs.pop("max_num_evaluation_samples")
         except KeyError as e:
             print(f"Missing keyword argument {e}=...in GPTuneConfig")
+            raise SystemExit
 
     def __getitem__(self, name: str):
         return self.__getattribute__(name)
@@ -196,11 +197,12 @@ class GPTune(Insight):
     def __init__(self, GPTUNE_CONFIG: GPTuneConfig):
         self.GPTUNE_CONFIG = GPTUNE_CONFIG
 
+    # clone should be inevitable for model hyperparameters, not so for training hyperparameters
     def run(
         self,
         model: Llama,
         tokens: torch.Tensor,
-        TRAIN_CONFIG: TrainConfig,
+        TUNE_CONFIG: TrainConfig = TrainConfig(batch_size=32, epochs=64),
         num_stan_samples: int = 50,
     ):
         N_train, M = (
@@ -212,7 +214,7 @@ class GPTune(Insight):
         sampler = stats.qmc.LatinHypercube(d=M)
         sample = sampler.random(n=N_train)
 
-        # samples should be intergers
+        # samples should be integers
         X_train = stats.qmc.scale(
             sample, self.GPTUNE_CONFIG["l_bounds"], self.GPTUNE_CONFIG["u_bounds"]
         ).astype(int)
@@ -222,7 +224,7 @@ class GPTune(Insight):
 
         # training & retrieve validation error for each sampled hyperparameter
         Y_train = np.array([])
-        for hyperparam in tqdm(X_train, total=N_train, colour="blue"):
+        for hyperparam in tqdm(X_train, total=N_train, colour="cyan"):
             model_clone = model.clone()
 
             for index, hyperparam_to_tune in enumerate(
@@ -235,7 +237,7 @@ class GPTune(Insight):
                     "context_window",
                     "log_size",
                 ]:
-                    TRAIN_CONFIG[hyperparam_to_tune] = hyperparam[index]
+                    TUNE_CONFIG[hyperparam_to_tune] = hyperparam[index]
 
                 else:
                     raise ValueError(
@@ -245,7 +247,7 @@ class GPTune(Insight):
             # [TODO] cache `DISABLE_TQDM`, then disable run
             Y_train = np.append(
                 Y_train,
-                float(Trainer(TRAIN_CONFIG).run(model_clone, tokens)[-1]["train"]),
+                float(Trainer(TUNE_CONFIG).run(model_clone, tokens)[-1]["train"]),
             )
 
         # generating test samples for hyperparameters
