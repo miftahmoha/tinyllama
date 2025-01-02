@@ -1,3 +1,5 @@
+# isort: skip_file
+
 __all__ = [
     "Insight",
     "GradInsight",
@@ -7,8 +9,8 @@ __all__ = [
     "SwigluPath",
 ]
 
+from .insight import Insight
 from .gdr_insight import GdrInsight
 from .gradient_insight import GradInsight
-from .insight import Insight
 from .lr_insight import LrInsight
 from .swiglu_insight import SwigluInsight, SwigluPath
