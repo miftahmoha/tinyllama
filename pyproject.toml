@@ -1,12 +1,12 @@
 [project]
 name = "tinyllama"
-version = "0.0.17"
+version = "0.0.1b"
 description = "Model classes and pre-training utilities for a tiny version of Llama in PyTorch."
 readme = "README.md"
 requires-python ="~=3.9"
 license = {file = "LICENSE"}
 authors = [
-  {name = "Achraf Miftah", email = "mbns.miftah.achraf@gmail.com"},
+  {name = "Achraf Miftah", email = "m.miftah.achraf@gmail.com"},
 ]
 keywords = ["llama", "llm", "deep-learning", "tinyllama"]
 classifiers = [
@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Information Analysis",
     "Topic :: Scientific/Engineering :: Mathematics",
 ]
-urls = {repository = "https://github.com/miftahmoha/tinyllama"}
+urls = {repository = "github.com/miftahmoha/tinyllama"}
 dependencies = ["tqdm", "torch", "pandas", "PyPDF2", "matplotlib", "numpy", "pystan"]
 
 [project.optional-dependencies]
