@@ -36,7 +36,6 @@ class GdrInsight(Insight):
                 if count > self.num_params_to_track:
                     break
 
-            # [TODO] cache `DISABLE_TQDM`, then disable run
             Trainer_.run(model_, tokens)
 
             # compute (lr*grad)/data for each param after training

@@ -36,7 +36,6 @@ class LrInsight(Insight):
         for lr in tqdm(lrs, total=self.n_lrs):
             TUNE_CONFIG_["lr"] = lr
             Trainer_ = Trainer(TUNE_CONFIG_)
-            # [TODO] cache `DISABLE_TQDM`, then disable run
             out = Trainer_.run(model_, tokens)
             losses += [out]
 

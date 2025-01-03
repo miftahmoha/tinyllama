@@ -104,7 +104,6 @@ class SwigluInsight(Insight):
 
         # train the model
         Trainer_ = Trainer(TUNE_CONFIG)
-        # [TODO] cache `DISABLE_TQDM`, then disable run
         Trainer_.run(model_, tokens)
 
         # computing saturations for swiglu layers
