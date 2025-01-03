@@ -12,6 +12,7 @@ functions {
     return K;
   }  
 
+
   matrix sqrtexp_kernel_star(matrix X1, matrix X2, real alpha, real rho) {
     int N_train = rows(X1);
     int N_val = rows(X2);
@@ -31,19 +32,14 @@ functions {
 data {
   // number of training samples
   int N_train;
-
   // number of test samples
   int N_val;
-
   // dimension of the hyperparameters
   int M;
-
   // matrix containing all training samples
   matrix[N_train, M] X_train;
-
   // matrix containing all test samples
   matrix[N_val, M] X_test;
-
   // vector containing all losses
   vector[N_train] Y_train;
 }
@@ -63,19 +59,18 @@ parameters {
 model {
   alpha ~ std_normal();
   rho ~ inv_gamma(5, 5);
-
   matrix[N_train, N_train] K;  
   K = sqrtexp_kernel(X_train, alpha, rho);
-  // Y_train ~ multi_normal(mu, K);
-
-  // cholesky_decompose: when working with small matrices, the differences in computational speed between the two approaches will not be noticeable, but for larger matrices (N≳100) the Cholesky decomposition version will be faster.
+  // cholesky_decompose
   matrix[N_train, N_train] L_K;
   L_K = cholesky_decompose(K);
+  // Y_train ~ multi_normal(mu, K);
   Y_train ~ multi_normal_cholesky(mu, L_K);
+  // with small matrices, the differences in computational speed between the two approaches will not be noticeable, but for larger matrices (N≳100) the Cholesky decomposition version will be faster.
 }
 
+
 generated quantities {  
-  
   matrix[N_train, N_train] K;  
   K = sqrtexp_kernel(X_train, alpha, rho);
 
@@ -88,10 +83,9 @@ generated quantities {
   vector[N_val] mu_star;
   matrix[N_val, N_val] sigma_star;
 
-  mu_star = K_star'*inverse(K)*Y_train;
-  sigma_star = K_star_star - K_star'*inverse(K)*K_star;
+  mu_star = K_star'*inverse_spd(K)*Y_train;
+  sigma_star = K_star_star - K_star'*inverse_spd(K)*K_star;
 
   vector[N_val] Y_test;
   Y_test = multi_normal_rng(mu_star, sigma_star); 
-
 }

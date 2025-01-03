@@ -4,6 +4,7 @@ Hyperparameter tuner for tinyllama using Bayesian implementation of a noiseless 
 
 import os
 import sys
+import warnings
 from itertools import islice, product
 from typing import TextIO
 
@@ -15,6 +16,7 @@ import torch
 from scipy import interpolate, stats
 from tqdm import tqdm
 
+from tinyllama.globals import DISABLE_PLOT
 from tinyllama.insight import Insight
 from tinyllama.models import Llama
 from tinyllama.training import TrainConfig, Trainer
@@ -76,7 +78,8 @@ def process_results(
     Y_train: np.ndarray,
     X_test: np.ndarray,
     N_val: int,
-    hyperparam_to_tune: list[str],
+    hyperparams_to_tune: list[str],
+    hyperparams_to_plot: list[str],
 ):
     """
     Process results and plots a 3D plot with the mean, 25% and 75% percentiles.
@@ -102,18 +105,139 @@ def process_results(
     eval_matrix = np.column_stack((X_test, Y_test_25qt, Y_test_mean, Y_test_75qt))
 
     # creating datafranes for X_train & X_test
-    train_df = pd.DataFrame(train_matrix, columns=hyperparam_to_tune + ["Y_train"])
+    train_df = pd.DataFrame(train_matrix, columns=hyperparams_to_tune + ["Y_train"])
     eval_df = pd.DataFrame(
-        eval_matrix, columns=hyperparam_to_tune + ["Y_25qtl", "Y_mean", "Y_75qtl"]
+        eval_matrix, columns=hyperparams_to_tune + ["Y_25qtl", "Y_mean", "Y_75qtl"]
     )
 
-    # 3D plot
-    plot_results(X_train, Y_train, X_test, Y_test_25qt, Y_test_mean, Y_test_75qt)
+    if DISABLE_PLOT:
+        warnings.warn(
+            "`DISABLE_PLOT` is set to 0, processing without plotting..", UserWarning
+        )
+    else:
+        if X_train.shape[1] == 1 and not hyperparams_to_plot:
+            plot_results_2D(
+                X_train,
+                Y_train,
+                X_test,
+                Y_test_25qt,
+                Y_test_mean,
+                Y_test_75qt,
+                hyperparams_to_tune,
+            )
+
+        elif X_train.shape[1] == 2 and not hyperparams_to_plot:
+            plot_results_3D(
+                X_train,
+                Y_train,
+                X_test,
+                Y_test_25qt,
+                Y_test_mean,
+                Y_test_75qt,
+                hyperparams_to_tune,
+            )
+
+        else:
+            indices: list[int] = (
+                [
+                    hyperparams_to_tune.index(hyperparam_to_plot)
+                    for hyperparam_to_plot in hyperparams_to_plot
+                ]
+                if hyperparams_to_plot
+                else []
+            )
+            labels: list[str] = sorted(
+                hyperparams_to_plot, key=lambda x: hyperparams_to_tune.index(x)
+            )
+            print(hyperparams_to_tune, hyperparams_to_plot)
+            print(indices, labels)
+
+            if len(indices) == 1:
+                print(X_train)
+                plot_results_2D(
+                    X_train[:, indices[0]],
+                    Y_train,
+                    X_test[:, indices[0]],
+                    Y_test_25qt,
+                    Y_test_mean,
+                    Y_test_75qt,
+                    labels[0],
+                )
+
+            elif len(indices) == 2:
+                plot_results_3D(
+                    X_train[:, indices],
+                    Y_train,
+                    X_test[:, indices],
+                    Y_test_25qt,
+                    Y_test_mean,
+                    Y_test_75qt,
+                    labels,
+                )
+
+            else:
+                warnings.warn(
+                    "`hyperparams_to_plot` is not set, processing without plotting..",
+                    UserWarning,
+                )
 
     return train_df, eval_df
 
 
-def plot_results(X_train, Y_train, X_test, Y_test_25qtl, Y_test_mean, Y_test_75qtl):
+def plot_results_2D(
+    X_train, Y_train, X_test, Y_test_25qt, Y_test_mean, Y_test_75qt, label
+):
+    # create the figure
+    plt.figure(figsize=(10, 6))
+
+    # order indices
+    indices = np.argsort(X_test)
+
+    # plot mean prediction
+    plt.plot(
+        X_test[indices],
+        Y_test_25qt[indices],
+        color="green",
+        linewidth=2,
+        label="25th Percentile",
+    )
+    plt.plot(
+        X_test[indices], Y_test_mean[indices], color="red", linewidth=2, label="Mean"
+    )
+    plt.plot(
+        X_test[indices],
+        Y_test_75qt[indices],
+        color="yellow",
+        linewidth=2,
+        label="75th Percentile",
+    )
+
+    # plot training data points
+    plt.scatter(
+        X_train, Y_train, color="orange", marker="o", alpha=0.6, label="Training Data"
+    )
+
+    # plot uncertainty region
+    plt.fill_between(
+        X_test[indices],
+        Y_test_25qt[indices],
+        Y_test_75qt[indices],
+        color="gray",
+        alpha=0.2,
+        label="Uncertainty Region",
+    )
+
+    plt.xlabel(label)
+    plt.ylabel("Loss")
+    plt.title("2D Surface Plot")
+    plt.legend()
+
+    plt.show()
+
+
+def plot_results_3D(
+    X_train, Y_train, X_test, Y_test_25qtl, Y_test_mean, Y_test_75qtl, labels
+):
     # create grid for the surface
     grid_x, grid_y = np.mgrid[
         min(X_test[:, 0]) : max(X_test[:, 0]) : 100j,
@@ -154,15 +278,11 @@ def plot_results(X_train, Y_train, X_test, Y_test_25qtl, Y_test_mean, Y_test_75q
         label="Training Data",
     )
 
-    # [TODO] need to figure out why parameters such as embedding dimensions, the number of heads.. are not set
-    # [TODO] need to set correct labels
-    # [TODO] need to deal with `nan` values
-    # [TODO] need to explain the meaning of color contrast relative to uncertainty
-    ax.set_xlabel("Epoches")
-    ax.set_ylabel("Embedding Dimension")
+    # [TODO] need to deal with `nan` values?
+    ax.set_xlabel(labels[0])
+    ax.set_ylabel(labels[1])
     ax.set_zlabel("Loss")
     ax.set_title("3D Surface Plot")
-
     ax.legend()
 
     plt.show()
@@ -173,6 +293,7 @@ class GPTuneConfig:
     l_bounds: list[int]
     u_bounds: list[int]
     hyperparams_to_tune: list[str]
+    hyperparams_to_plot: list[str]
     max_num_evaluation_samples: int
 
     def __init__(self, **kwargs):
@@ -181,6 +302,7 @@ class GPTuneConfig:
             self.l_bounds = kwargs.pop("l_bounds")
             self.u_bounds = kwargs.pop("u_bounds")
             self.hyperparams_to_tune = kwargs.pop("hyperparams_to_tune")
+            self.hyperparams_to_plot = kwargs.pop("hyperparams_to_plot", [])
             self.max_num_evaluation_samples = kwargs.pop("max_num_evaluation_samples")
         except KeyError as e:
             print(f"Missing keyword argument {e}=...in GPTuneConfig")
@@ -197,7 +319,6 @@ class GPTune(Insight):
     def __init__(self, GPTUNE_CONFIG: GPTuneConfig):
         self.GPTUNE_CONFIG = GPTUNE_CONFIG
 
-    # clone should be inevitable for model hyperparameters, not so for training hyperparameters
     def run(
         self,
         model: Llama,
@@ -225,7 +346,7 @@ class GPTune(Insight):
         # training & retrieve validation error for each sampled hyperparameter
         Y_train = np.array([])
         for hyperparam in tqdm(X_train, total=N_train, colour="cyan"):
-            model_clone = model.clone()
+            model_settings: dict[str, int] = {}
 
             for index, hyperparam_to_tune in enumerate(
                 self.GPTUNE_CONFIG["hyperparams_to_tune"]
@@ -239,15 +360,25 @@ class GPTune(Insight):
                 ]:
                     TUNE_CONFIG[hyperparam_to_tune] = hyperparam[index]
 
+                elif hyperparam_to_tune in [
+                    "context_window",
+                    "emb_dim",
+                    "n_heads",
+                    "n_blocks",
+                    "gq_ratio",
+                    "vocab_size",
+                ]:
+                    model_settings[hyperparam_to_tune] = hyperparam[index]
+
                 else:
                     raise ValueError(
                         f"The parameter {hyperparam_to_tune} is inexistant"
                     )
 
-            # [TODO] cache `DISABLE_TQDM`, then disable run
+            model_ = model.new(**model_settings) if model_settings else model.clone()
             Y_train = np.append(
                 Y_train,
-                float(Trainer(TUNE_CONFIG).run(model_clone, tokens)[-1]["train"]),
+                float(Trainer(TUNE_CONFIG).run(model_, tokens)[-1]["train"]),
             )
 
         # generating test samples for hyperparameters
@@ -285,6 +416,7 @@ class GPTune(Insight):
             X_test,
             N_val,
             self.GPTUNE_CONFIG["hyperparams_to_tune"],
+            self.GPTUNE_CONFIG["hyperparams_to_plot"],
         )
 
         return results

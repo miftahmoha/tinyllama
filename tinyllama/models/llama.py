@@ -185,8 +185,13 @@ class Llama(nn.Module):
         vocab_size: int,
     ):
         super().__init__()
-        self.vocab_size = vocab_size
+        self.context_window = context_window
         self.emb_dim = emb_dim
+        self.n_heads = n_heads
+        self.n_blocks = n_blocks
+        self.gq_ratio = gq_ratio
+        self.vocab_size = vocab_size
+
         self.embedding = nn.Embedding(vocab_size, emb_dim)
         self.llama_block_seq = nn.Sequential(
             OrderedDict(
@@ -232,6 +237,23 @@ class Llama(nn.Module):
                 attention_head.cache["v"] = torch.empty(
                     1, 0, self.emb_dim, requires_grad=False
                 ).to(DEVICE)
+
+    def new(self, **kwargs):
+        # get the current hyperparameters from the existing model
+        current_params = {
+            "context_window": self.context_window,
+            "emb_dim": self.emb_dim,
+            "n_heads": self.n_heads,
+            "n_blocks": self.n_blocks,
+            "gq_ratio": self.gq_ratio,
+            "vocab_size": self.vocab_size,
+        }
+
+        # update the current hyperparameters with the new ones provided by the user
+        current_params.update(kwargs)
+
+        # create a new model with the updated hyperparameters
+        return Llama(**current_params)
 
     def clone(self):
         return deepcopy(self)
