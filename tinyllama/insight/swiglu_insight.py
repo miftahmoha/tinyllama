@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 
+from tinyllama.globals import compute_statistics
 from tinyllama.insight import Insight
 from tinyllama.models import Llama
 from tinyllama.training import TrainConfig, Trainer
@@ -45,18 +46,8 @@ def plot_layer(layer_name: str, color: str):
     plt.plot(hx[:-1].detach(), hy.detach(), color=color)
 
 
-def compute_saturation(layer_name: str, precision: float = 1e-4):
-    num_close_to_zero = torch.sum(
-        torch.abs(activation[layer_name][:, :, :].cpu()) < precision
-    ).item()
-    total_elements = torch.prod(
-        torch.tensor(activation[layer_name][:, :, :].cpu().shape)
-    ).item()
-    return num_close_to_zero / total_elements
-
-
 class SwigluInsight(Insight):
-    def __init__(self, *, track_direction: SwigluPath):
+    def __init__(self, *, track_direction: SwigluPath = SwigluPath.BACKWARD):
         self.track_direction = track_direction
 
     def run(
@@ -108,12 +99,24 @@ class SwigluInsight(Insight):
 
         # computing saturations for swiglu layers
         if self.track_direction == SwigluPath.BACKWARD:
-            saturation_swiglu_0 = compute_saturation("SwiGLU: Layer 0")
-            print(f"SwiGLU: Layer 0 | Saturation: {saturation_swiglu_0}")
-            saturation_swiglu_1 = compute_saturation("SwiGLU: Layer 1")
-            print(f"SwiGLU: Layer 1 | Saturation: {saturation_swiglu_1}")
-            saturation_swiglu_2 = compute_saturation("SwiGLU: Layer 2")
-            print(f"SwiGLU: Layer 2 | Saturation: {saturation_swiglu_2}")
+            mean, std, saturation = compute_statistics(
+                activation["SwiGLU: Layer 0"][:, :, :].cpu()
+            )
+            print(
+                f"SwiGLU: Layer 0 | Mean: {mean} | Standard deviation: {std} | Saturation: {saturation}"
+            )
+            mean, std, saturation = compute_statistics(
+                activation["SwiGLU: Layer 1"][:, :, :].cpu()
+            )
+            print(
+                f"SwiGLU: Layer 1 | Mean: {mean} | Standard deviation: {std} | Saturation: {saturation}"
+            )
+            mean, std, saturation = compute_statistics(
+                activation["SwiGLU: Layer 2"][:, :, :].cpu()
+            )
+            print(
+                f"SwiGLU: Layer 2 | Mean: {mean} | Standard deviation: {std} | Saturation: {saturation}"
+            )
 
         legends = []
 

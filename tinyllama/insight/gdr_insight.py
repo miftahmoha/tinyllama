@@ -10,9 +10,16 @@ from tinyllama.training import TrainConfig, Trainer
 
 
 class GdrInsight(Insight):
-    def __init__(self, *, num_iters: int, num_params_to_track: int):
+    def __init__(
+        self,
+        *,
+        num_iters: int,
+        num_params_to_track: int,
+        show_params_name: bool = False,
+    ):
         self.num_iters = num_iters
         self.num_params_to_track = num_params_to_track
+        self.show_params_name = show_params_name
 
     def run(
         self,
@@ -21,6 +28,7 @@ class GdrInsight(Insight):
         TUNE_CONFIG: TrainConfig = TrainConfig(batch_size=32, epochs=64),
         tune_on_clone: bool = False,
     ):
+        legends: list[str] = []
         model_ = model.clone() if tune_on_clone else model
 
         Trainer_ = Trainer(TUNE_CONFIG)
@@ -51,10 +59,12 @@ class GdrInsight(Insight):
 
         for name, gdr_list in gd_records.items():
             name = ".".join(name.split(".")[-2:])
-            # legends.append(f"Param name: {name}")
+            if self.show_params_name:
+                legends.append(f"Param name: {name}")
             plt.plot(gdr_list)
 
         # recommended threshold
         plt.axhline(y=1e-3, color="r", linestyle="--")
         plt.title("Gradient over data ratio across multiple runs")
+        plt.legend(legends)
         plt.show()

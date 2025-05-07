@@ -1,7 +1,7 @@
 from PyPDF2 import PdfReader
 
 
-def pre_process_corpus(corpus):
+def filter(corpus):
     allowed_characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !#$%&'[]()*+,-./:;<=>?@^_`{|}~\t\n\r"
 
     # Use list comprehension to filter characters
@@ -20,7 +20,7 @@ def get_pdf_text(pdf_path: str) -> str:
     pdf_reader = PdfReader(pdf_path)
     for page in pdf_reader.pages:
         text += page.extract_text()
-    return text
+    return filter(text)
 
 
 def get_text(txt_path: str) -> str:
@@ -31,7 +31,6 @@ def get_text(txt_path: str) -> str:
     try:
         with open(txt_path) as file:
             content = file.read()
-            return content
-    except FileNotFoundError:
-        print(f"Error: File '{txt_path}' not found.")
-        return ""
+            return filter(content)
+    except FileNotFoundError as e:
+        raise e
