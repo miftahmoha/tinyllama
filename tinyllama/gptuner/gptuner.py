@@ -16,7 +16,7 @@ import torch
 from scipy import interpolate, stats
 from tqdm import tqdm
 
-from tinyllama.globals import DISABLE_PLOT
+from tinyllama.globals import DISABLE_PLOT, QUIET_STAN
 from tinyllama.insight import Insight
 from tinyllama.models import Llama
 from tinyllama.training import TrainConfig, Trainer
@@ -64,6 +64,18 @@ def redirect_streams(stdout: TextIO, stderr: TextIO):
     sys.stdout = stdout
     sys.stderr = stderr
     return streams
+
+
+class QuietStan:
+    def __enter__(self):
+        if QUIET_STAN:
+            self.dev_null = open(os.devnull, "w")
+            self.stdout, self.stderr = redirect_streams(self.dev_null, self.dev_null)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        if QUIET_STAN:
+            _, _ = redirect_streams(self.stdout, self.stderr)
+            self.dev_null.close()
 
 
 # reads the STAN model
@@ -400,14 +412,14 @@ class GPTune(Insight):
         posterior = stan.build(gptuner_stan, data=data)
 
         # redirects output streams to devnull
-        dev_null = open(os.devnull, "w")
-        stdout, stderr = redirect_streams(dev_null, dev_null)
-
-        fit_results = posterior.sample(num_chains=4, num_samples=num_stan_samples)
+        # dev_null = open(os.devnull, "w")
+        # stdout, stderr = redirect_streams(dev_null, dev_null)
+        with QuietStan():
+            fit_results = posterior.sample(num_chains=4, num_samples=num_stan_samples)
 
         # redirects them back
-        _, _ = redirect_streams(stdout, stderr)
-        dev_null.close()
+        # redirect_streams(stdout, stderr)
+        # dev_null.close()
 
         results = process_results(
             fit_results,

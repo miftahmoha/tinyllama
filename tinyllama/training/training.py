@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 from tqdm import tqdm
 
-from tinyllama.globals import DISABLE_LOGS, IGNORE_TRAINING
+from tinyllama.globals import DISABLE_LOGS, DISABLE_PROGRESS
 from tinyllama.models import Llama
 
 
@@ -127,7 +127,7 @@ class Trainer:
             split="train",
         )
 
-        for epoch in tqdm(range(self.TRAIN_CONFIG.epochs), disable=IGNORE_TRAINING):
+        for epoch in tqdm(range(self.TRAIN_CONFIG.epochs), disable=DISABLE_PROGRESS):
             optimizer.zero_grad()
             _, loss = model(x, y)
             loss.backward()
