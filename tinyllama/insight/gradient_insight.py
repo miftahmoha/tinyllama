@@ -6,7 +6,6 @@ from tinyllama.globals import compute_statistics
 from tinyllama.models import Llama
 
 
-# [TODO] User can track parameters of interest?
 class GradInsight:
     def __init__(self, *, num_params_to_track: int, show_params_name: bool = False):
         self.num_params_to_track = num_params_to_track
@@ -28,7 +27,7 @@ class GradInsight:
                 name = ".".join(elem[0].split(".")[-2:])
 
                 if self.show_params_name:
-                    legends.append(f"Param name: {name}")
+                    legends.append(f"{name}")
 
                 gradients = torch.cat([gradients, elem[1].grad.flatten()])
 

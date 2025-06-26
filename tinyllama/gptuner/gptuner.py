@@ -161,11 +161,8 @@ def process_results(
             labels: list[str] = sorted(
                 hyperparams_to_plot, key=lambda x: hyperparams_to_tune.index(x)
             )
-            print(hyperparams_to_tune, hyperparams_to_plot)
-            print(indices, labels)
 
             if len(indices) == 1:
-                print(X_train)
                 plot_results_2D(
                     X_train[:, indices[0]],
                     Y_train,
@@ -209,7 +206,7 @@ def plot_results_2D(
     plt.plot(
         X_test[indices],
         Y_test_25qt[indices],
-        color="green",
+        color="black",
         linewidth=2,
         label="25th Percentile",
     )
@@ -219,7 +216,7 @@ def plot_results_2D(
     plt.plot(
         X_test[indices],
         Y_test_75qt[indices],
-        color="yellow",
+        color="orange",
         linewidth=2,
         label="75th Percentile",
     )
